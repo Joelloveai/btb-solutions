@@ -1,0 +1,8 @@
+node_modules
+.next
+.env
+*.db
+*.db-journal
+test-results
+playwright-report
+screenshots/.tmp
