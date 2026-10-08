@@ -2,24 +2,34 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { addCost } from "@/app/actions";
+import { addCost, updateCost } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/field";
-import { ModalButton } from "@/components/ui/modal";
+import { Modal, ModalButton } from "@/components/ui/modal";
+import { useCallback, useState } from "react";
+import { EditIconButton } from "./row-actions";
 import { CATEGORY_LABELS, COST_CATEGORIES } from "@/lib/constants";
 import { todayInputValue } from "@/lib/format";
 import { costSchema, type CostInput } from "@/lib/validators";
 import { useSubmit } from "./use-submit";
 
-function Form({ projectId, close }: { projectId: string; close: () => void }) {
-  const { pending, submit } = useSubmit("Cost added", close);
+function Form({
+  projectId,
+  close,
+  editing,
+}: {
+  projectId: string;
+  close: () => void;
+  editing?: { id: string; values: CostInput };
+}) {
+  const { pending, submit } = useSubmit(editing ? "Cost updated" : "Cost added", close);
   const {
     register,
     handleSubmit,
     formState: { errors },
   } = useForm<CostInput>({
     resolver: zodResolver(costSchema),
-    defaultValues: {
+    defaultValues: editing?.values ?? {
       date: todayInputValue(),
       category: "MATERIAL",
       description: "",
@@ -30,7 +40,7 @@ function Form({ projectId, close }: { projectId: string; close: () => void }) {
   });
 
   return (
-    <form onSubmit={handleSubmit((values) => submit(() => addCost(projectId, values)))} className="space-y-3">
+    <form onSubmit={handleSubmit((values) => submit(() => (editing ? updateCost(editing.id, values) : addCost(projectId, values))))} className="space-y-3">
       <Field label="Date" error={errors.date?.message}>
         <Input {...register("date")} type="date" />
       </Field>
@@ -67,5 +77,26 @@ export function AddCostForm({ projectId }: { projectId: string }) {
     <ModalButton label="+ Add Cost" title="Add cost">
       {(close) => <Form projectId={projectId} close={close} />}
     </ModalButton>
+  );
+}
+
+export function EditCostButton({
+  projectId,
+  id,
+  values,
+}: {
+  projectId: string;
+  id: string;
+  values: CostInput;
+}) {
+  const [open, setOpen] = useState(false);
+  const close = useCallback(() => setOpen(false), []);
+  return (
+    <>
+      <EditIconButton label="Edit cost" onClick={() => setOpen(true)} />
+      <Modal open={open} onClose={close} title="Edit cost">
+        <Form projectId={projectId} close={close} editing={{ id, values }} />
+      </Modal>
+    </>
   );
 }

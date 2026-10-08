@@ -140,3 +140,70 @@ export async function setChangeOrderStatus(
     return failure(error);
   }
 }
+
+async function mutateRow<T extends { projectId: string }>(run: () => Promise<T>): Promise<ActionResult> {
+  try {
+    await requireSession();
+    const row = await run();
+    revalidatePath("/dashboard");
+    revalidatePath(`/projects/${row.projectId}`);
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+export async function updateCost(id: string, input: unknown): Promise<ActionResult> {
+  const parsed = costSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+  const v = parsed.data;
+  return mutateRow(() =>
+    prisma.costEntry.update({
+      where: { id },
+      data: {
+        date: toDate(v.date),
+        category: v.category,
+        description: v.description,
+        amount: v.amount,
+        vendor: orNull(v.vendor),
+        reference: orNull(v.reference),
+      },
+    }),
+  );
+}
+
+export async function updatePayment(id: string, input: unknown): Promise<ActionResult> {
+  const parsed = paymentSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+  const v = parsed.data;
+  return mutateRow(() =>
+    prisma.payment.update({
+      where: { id },
+      data: { date: toDate(v.date), amount: v.amount, reference: orNull(v.reference) },
+    }),
+  );
+}
+
+export async function updateChangeOrder(id: string, input: unknown): Promise<ActionResult> {
+  const parsed = changeOrderSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+  const v = parsed.data;
+  return mutateRow(() =>
+    prisma.changeOrder.update({
+      where: { id },
+      data: { date: toDate(v.date), description: v.description, amount: v.amount },
+    }),
+  );
+}
+
+export async function deleteCost(id: string): Promise<ActionResult> {
+  return mutateRow(() => prisma.costEntry.delete({ where: { id } }));
+}
+
+export async function deletePayment(id: string): Promise<ActionResult> {
+  return mutateRow(() => prisma.payment.delete({ where: { id } }));
+}
+
+export async function deleteChangeOrder(id: string): Promise<ActionResult> {
+  return mutateRow(() => prisma.changeOrder.delete({ where: { id } }));
+}

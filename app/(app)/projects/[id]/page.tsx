@@ -68,6 +68,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
           description: c.description,
           amount: c.amount.toNumber(),
           vendor: c.vendor,
+          reference: c.reference,
         }))}
         payments={project.payments.map((p) => ({
           id: p.id,

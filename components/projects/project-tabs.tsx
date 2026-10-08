@@ -4,7 +4,16 @@ import clsx from "clsx";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { setChangeOrderStatus } from "@/app/actions";
+import {
+  deleteChangeOrder,
+  deleteCost,
+  deletePayment,
+  setChangeOrderStatus,
+} from "@/app/actions";
+import { EditChangeOrderButton } from "@/components/forms/add-change-order-form";
+import { EditCostButton } from "@/components/forms/add-cost-form";
+import { EditPaymentButton } from "@/components/forms/add-payment-form";
+import { DeleteIconButton } from "@/components/forms/row-actions";
 import { AddChangeOrderForm } from "@/components/forms/add-change-order-form";
 import { AddCostForm } from "@/components/forms/add-cost-form";
 import { AddPaymentForm } from "@/components/forms/add-payment-form";
@@ -26,6 +35,7 @@ export type CostRow = {
   description: string;
   amount: number;
   vendor: string | null;
+  reference: string | null;
 };
 export type PaymentRow = { id: string; date: string; amount: number; reference: string | null };
 export type ChangeOrderRow = {
@@ -88,12 +98,14 @@ export function ProjectTabs({
 
 function TableShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
-      <table className="w-full min-w-[520px] text-left text-sm">{children}</table>
+    <div className="relative overflow-x-auto rounded-xl border border-gray-200 bg-white">
+      <table className="w-full min-w-[600px] text-left text-sm">{children}</table>
     </div>
   );
 }
 
+const dateValue = (iso: string) => iso.slice(0, 10);
+const actionsTh = <th className="w-28 px-3 py-2.5"><span className="sr-only">Actions</span></th>;
 const th = "px-3 py-2.5 font-semibold text-gray-600";
 const td = "px-3 py-3 align-top";
 
@@ -117,6 +129,7 @@ function CostsPanel({ projectId, rows }: { projectId: string; rows: CostRow[] })
               <th className={th}>Category</th>
               <th className={th}>Description</th>
               <th className={`${th} text-right`}>Amount</th>
+              {actionsTh}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -129,6 +142,27 @@ function CostsPanel({ projectId, rows }: { projectId: string; rows: CostRow[] })
                   {row.vendor ? <span className="block text-xs text-gray-500">{row.vendor}</span> : null}
                 </td>
                 <td className={`${td} text-right font-semibold`}>{formatRM(row.amount)}</td>
+                <td className={td}>
+                  <div className="flex justify-end">
+                    <EditCostButton
+                      projectId={projectId}
+                      id={row.id}
+                      values={{
+                        date: dateValue(row.date),
+                        category: row.category as CostCategory,
+                        description: row.description,
+                        amount: String(row.amount),
+                        vendor: row.vendor ?? "",
+                        reference: row.reference ?? "",
+                      }}
+                    />
+                    <DeleteIconButton
+                      label="Delete cost"
+                      message={`Delete this cost of ${formatRM(row.amount)}?`}
+                      onConfirm={() => deleteCost(row.id)}
+                    />
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -157,6 +191,7 @@ function PaymentsPanel({ projectId, rows }: { projectId: string; rows: PaymentRo
               <th className={th}>Date</th>
               <th className={`${th} text-right`}>Amount</th>
               <th className={th}>Reference</th>
+              {actionsTh}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -165,6 +200,24 @@ function PaymentsPanel({ projectId, rows }: { projectId: string; rows: PaymentRo
                 <td className={td}>{formatDate(row.date)}</td>
                 <td className={`${td} text-right font-semibold`}>{formatRM(row.amount)}</td>
                 <td className={td}>{row.reference ?? "—"}</td>
+                <td className={td}>
+                  <div className="flex justify-end">
+                    <EditPaymentButton
+                      projectId={projectId}
+                      id={row.id}
+                      values={{
+                        date: dateValue(row.date),
+                        amount: String(row.amount),
+                        reference: row.reference ?? "",
+                      }}
+                    />
+                    <DeleteIconButton
+                      label="Delete payment"
+                      message={`Delete this payment of ${formatRM(row.amount)}?`}
+                      onConfirm={() => deletePayment(row.id)}
+                    />
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -209,6 +262,7 @@ function ChangeOrdersPanel({ projectId, rows }: { projectId: string; rows: Chang
               <th className={th}>Description</th>
               <th className={`${th} text-right`}>Amount</th>
               <th className={th}>Status</th>
+              {actionsTh}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -231,6 +285,24 @@ function ChangeOrdersPanel({ projectId, rows }: { projectId: string; rows: Chang
                         </Button>
                       </div>
                     ) : null}
+                  </td>
+                  <td className={td}>
+                    <div className="flex justify-end">
+                      <EditChangeOrderButton
+                        projectId={projectId}
+                        id={row.id}
+                        values={{
+                          date: dateValue(row.date),
+                          description: row.description,
+                          amount: String(row.amount),
+                        }}
+                      />
+                      <DeleteIconButton
+                        label="Delete change order"
+                        message={`Delete this change order of ${formatRM(row.amount)}?`}
+                        onConfirm={() => deleteChangeOrder(row.id)}
+                      />
+                    </div>
                   </td>
                 </tr>
               );
