@@ -5,9 +5,11 @@ import { summarizeProject } from "@/lib/project-summary";
 import { getLocale } from "@/lib/locale";
 import { prisma } from "@/lib/prisma";
 import { ProjectCard } from "./project-card";
+import { KpiCard } from "@/components/ui/kpi-card";
+import { formatRM } from "@/lib/format";
 import { ProjectTable } from "./project-table";
 
-export async function ProjectList({ onlyActive }: { onlyActive: boolean }) {
+export async function ProjectList({ onlyActive, showKpis = false }: { onlyActive: boolean; showKpis?: boolean }) {
   const locale = await getLocale();
   const projects = await prisma.project.findMany({
     where: onlyActive ? { status: "ACTIVE" } : undefined,
@@ -33,8 +35,26 @@ export async function ProjectList({ onlyActive }: { onlyActive: boolean }) {
 
   rows.sort((a, b) => b.totals.realProfit - a.totals.realProfit);
 
+  // Portfolio totals are Decimal sums of the same per-project figures shown below.
+  const sum = (pick: (r: (typeof rows)[number]) => number) =>
+    rows.reduce((t, r) => t.plus(pick(r)), new Prisma.Decimal(0)).toDP(2).toNumber();
+  const portfolio = {
+    contract: sum((r) => r.contractValue),
+    cash: sum((r) => r.totals.totalPayments),
+    outstanding: sum((r) => r.totals.outstandingBalance),
+    profit: sum((r) => r.totals.realProfit),
+  };
+
   return (
     <>
+      {showKpis ? (
+        <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <KpiCard label="Contract Value" value={formatRM(portfolio.contract, locale)} hint={`${rows.length} active`} />
+          <KpiCard label="Cash Received" value={formatRM(portfolio.cash, locale)} />
+          <KpiCard label="Outstanding" value={formatRM(portfolio.outstanding, locale)} tone="pending" />
+          <KpiCard label="Real Profit" value={formatRM(portfolio.profit, locale)} tone={portfolio.profit >= 0 ? "profit" : "loss"} />
+        </div>
+      ) : null}
       <div className="hidden md:block">
         <ProjectTable
           locale={locale}

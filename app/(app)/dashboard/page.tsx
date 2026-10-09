@@ -1,5 +1,6 @@
 import { CreateProjectForm } from "@/components/forms/create-project-form";
 import { getT } from "@/lib/locale";
+import { PageHeader } from "@/components/ui/page-header";
 import { ProjectList } from "@/components/projects/project-list";
 
 export const dynamic = "force-dynamic";
@@ -8,11 +9,10 @@ export default async function DashboardPage() {
   const { t } = await getT();
   return (
     <>
-      <div className="mb-5 flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">{t.dashboard}</h1>
+      <PageHeader title={t.dashboard}>
         <CreateProjectForm />
-      </div>
-      <ProjectList onlyActive />
+      </PageHeader>
+      <ProjectList onlyActive showKpis />
     </>
   );
 }
