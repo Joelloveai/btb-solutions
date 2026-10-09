@@ -9,6 +9,9 @@ import { calculateQuote, quoteNumber } from "@/lib/quotes";
 
 export const dynamic = "force-dynamic";
 
+/** Units are typed as plain text, so show area and volume the way they are written on paper. */
+const printUnit = (unit: string) => unit.replace(/^m2$/i, "m²").replace(/^m3$/i, "m³");
+
 export default async function QuotePrintPage({ params }: { params: { id: string } }) {
   const quote = await prisma.quote.findUnique({ where: { id: params.id }, include: { lines: { orderBy: { position: "asc" } } } });
   if (!quote) notFound();
@@ -36,7 +39,7 @@ export default async function QuotePrintPage({ params }: { params: { id: string 
               <th className="py-2">No.</th>
               <th className="py-2">Description</th>
               <th className="py-2 text-right">Qty</th>
-              <th className="py-2">Unit</th>
+              <th className="py-2 pl-4">Unit</th>
               <th className="py-2 text-right">Unit Price</th>
               <th className="py-2 text-right">Amount</th>
             </tr>
@@ -47,7 +50,7 @@ export default async function QuotePrintPage({ params }: { params: { id: string 
                 <td className="py-2">{i + 1}</td>
                 <td className="py-2">{l.description}</td>
                 <td className="py-2 text-right">{l.qty.toString()}</td>
-                <td className="py-2">{l.unit}</td>
+                <td className="py-2 pl-4">{printUnit(l.unit)}</td>
                 <td className="py-2 text-right">{money(l.unitPrice.toNumber())}</td>
                 <td className="py-2 text-right font-semibold">{money(l.amount.toNumber())}</td>
               </tr>

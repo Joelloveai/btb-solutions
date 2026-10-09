@@ -9,3 +9,13 @@ html {
 body {
   @apply bg-slate-50 text-slate-900 antialiased;
 }
+
+/* Print output never shows the app's page tint. */
+@media print {
+  html {
+    background: #fff;
+  }
+  body {
+    background: transparent;
+  }
+}

@@ -45,9 +45,9 @@ export default async function ClaimPrintPage({ params }: { params: { id: string;
           <dt className="text-slate-600">Claim No.</dt><dd className="font-semibold">{claim.number}</dd>
           <dt className="text-slate-600">Claim Date</dt><dd className="font-semibold">{formatDate(claim.date, locale)}</dd>
         </dl>
-        <dl className="divide-y divide-slate-200 border-y border-slate-200">
+        <dl className="divide-y divide-slate-200 border-y border-slate-200 text-sm">
           {rows.map(([label, value, strong]) => (
-            <div key={label} className={`flex justify-between gap-4 py-2.5 ${strong ? "text-base font-bold" : ""}`}>
+            <div key={label} className={`flex justify-between gap-4 py-2.5 ${strong ? "font-bold" : ""}`}>
               <dt className={strong ? "" : "text-slate-600"}>{label}</dt>
               <dd className="text-right font-semibold">{value}</dd>
             </div>
