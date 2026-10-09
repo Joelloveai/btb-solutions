@@ -1,10 +1,10 @@
 import clsx from "clsx";
 
 const tones = {
-  green: "bg-green-100 text-green-800",
-  red: "bg-red-100 text-red-800",
-  yellow: "bg-amber-100 text-amber-800",
-  gray: "bg-gray-100 text-gray-700",
+  green: "bg-profit-light text-profit-dark",
+  red: "bg-loss-light text-loss-dark",
+  yellow: "bg-pending-light text-pending-dark",
+  gray: "bg-slate-100 text-slate-700",
   blue: "bg-brand-light text-brand",
 } as const;
 

@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import type { ActionResult } from "@/app/actions";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/components/locale-provider";
 import { Modal } from "@/components/ui/modal";
 import { useSubmit } from "./use-submit";
 
@@ -32,6 +33,7 @@ export function DeleteIconButton({
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
   const { pending, submit } = useSubmit("Deleted", close);
+  const t = useT();
 
   return (
     <>
@@ -46,10 +48,10 @@ export function DeleteIconButton({
         <p className="mb-5 text-base text-gray-800">{message}</p>
         <div className="grid grid-cols-2 gap-3">
           <Button variant="secondary" onClick={close} disabled={pending}>
-            Cancel
+            {t.cancel}
           </Button>
           <Button variant="danger" onClick={() => submit(onConfirm)} disabled={pending}>
-            {pending ? "Deleting…" : "Delete"}
+            {pending ? "…" : t.delete}
           </Button>
         </div>
       </Modal>

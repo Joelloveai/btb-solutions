@@ -1,46 +1,52 @@
 import Link from "next/link";
 import clsx from "clsx";
 import { formatRM } from "@/lib/format";
-import type { ProjectTotals } from "@/lib/calculations";
+import type { Locale } from "@/lib/i18n";
+import type { ProjectSummary } from "@/lib/project-summary";
 
+/** Phone layout: the same numbers as a table row, with padding trimmed ~40% from the old card. */
 export function ProjectCard({
   id,
   name,
   clientName,
   contractValue,
   totals,
+  locale,
 }: {
   id: string;
   name: string;
   clientName: string | null;
   contractValue: number;
-  totals: ProjectTotals;
+  totals: ProjectSummary;
+  locale: Locale;
 }) {
-  const inProfit = totals.profitLoss >= 0;
+  const inProfit = totals.realProfit >= 0;
+  const money = (value: number) => formatRM(value, locale);
   return (
     <Link
       href={`/projects/${id}`}
-      className="block rounded-xl border border-gray-200 bg-white p-4 shadow-sm transition hover:border-brand"
+      className="block rounded-xl border border-slate-200 bg-white p-[0.6rem] shadow-sm transition hover:border-brand"
     >
-      <h2 className="text-lg font-bold">{name}</h2>
-      {clientName ? <p className="text-sm text-gray-600">{clientName}</p> : null}
-      <dl className="mt-3 grid grid-cols-2 gap-3 text-sm">
-        <Stat label="Contract Value" value={formatRM(contractValue)} />
-        <Stat label="Total Costs" value={formatRM(totals.totalCosts)} />
-        <Stat label="Payments Received" value={formatRM(totals.totalPayments)} />
-        <Stat label="Outstanding Balance" value={formatRM(totals.outstandingBalance)} />
+      <h2 className="text-base font-bold">{name}</h2>
+      {clientName ? <p className="text-sm text-slate-600">{clientName}</p> : null}
+      <dl className="mt-2 grid grid-cols-2 gap-2 text-sm">
+        <Stat label="Contract Value" value={money(contractValue)} />
+        <Stat label="Claims Issued" value={money(totals.claimsIssued)} />
+        <Stat label="Total Costs" value={money(totals.totalCosts)} />
+        <Stat label="Payments Received" value={money(totals.totalPayments)} />
+        <Stat label="Subcon Owed" value={money(totals.subconOwed)} />
+        <Stat label="Retention Held" value={money(totals.retentionHeld)} />
+        <Stat label="Outstanding Balance" value={money(totals.outstandingBalance)} />
       </dl>
       <div
         data-testid="profit-loss"
         className={clsx(
-          "mt-3 rounded-lg px-3 py-2",
-          inProfit ? "bg-green-50 text-green-800" : "bg-red-50 text-red-800",
+          "mt-2 rounded-lg px-2 py-1.5",
+          inProfit ? "bg-profit-light text-profit-dark" : "bg-loss-light text-loss-dark",
         )}
       >
-        <span className="block text-xs font-medium uppercase tracking-wide">
-          Current {inProfit ? "Profit" : "Loss"}
-        </span>
-        <span className="text-xl font-bold">{formatRM(totals.profitLoss)}</span>
+        <span className="block text-xs font-medium uppercase tracking-wide">Real {inProfit ? "Profit" : "Loss"}</span>
+        <span className="text-lg font-bold">{money(totals.realProfit)}</span>
       </div>
     </Link>
   );
@@ -49,7 +55,7 @@ export function ProjectCard({
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-gray-500">{label}</dt>
+      <dt className="text-slate-500">{label}</dt>
       <dd className="font-semibold">{value}</dd>
     </div>
   );

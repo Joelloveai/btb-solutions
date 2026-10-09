@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
+  deleteBoqLine,
   deleteChangeOrder,
   deleteCost,
   deletePayment,
@@ -13,7 +14,10 @@ import {
 import { EditChangeOrderButton } from "@/components/forms/add-change-order-form";
 import { EditCostButton } from "@/components/forms/add-cost-form";
 import { EditPaymentButton } from "@/components/forms/add-payment-form";
+import { AddBoqLineForm, EditBoqLineButton } from "@/components/forms/boq-line-form";
 import { DeleteIconButton } from "@/components/forms/row-actions";
+import { MarkPaidButton } from "@/components/subcons/mark-paid-button";
+import type { Lookups } from "./lookups";
 import { AddChangeOrderForm } from "@/components/forms/add-change-order-form";
 import { AddCostForm } from "@/components/forms/add-cost-form";
 import { AddPaymentForm } from "@/components/forms/add-payment-form";
@@ -26,7 +30,9 @@ import {
   type ChangeOrderStatus,
   type CostCategory,
 } from "@/lib/constants";
-import { formatDate, formatRM } from "@/lib/format";
+import { formatDate, formatRM as formatMoney } from "@/lib/format";
+import { useLocale, useT } from "@/components/locale-provider";
+import type { Locale } from "@/lib/i18n";
 
 export type CostRow = {
   id: string;
@@ -36,20 +42,47 @@ export type CostRow = {
   amount: number;
   vendor: string | null;
   reference: string | null;
+  subcontractorId: string | null;
+  subconName: string | null;
+  boqLineId: string | null;
+  boqLabel: string | null;
+  paidAt: string | null;
 };
-export type PaymentRow = { id: string; date: string; amount: number; reference: string | null };
+export type PaymentRow = {
+  id: string;
+  date: string;
+  amount: number;
+  reference: string | null;
+  claimId: string | null;
+  claimNumber: number | null;
+};
 export type ChangeOrderRow = {
   id: string;
   date: string;
   description: string;
   amount: number;
   status: string;
+  boqLineId: string | null;
+  boqLabel: string | null;
+};
+export type BoqRow = {
+  id: string;
+  description: string;
+  qty: string;
+  unit: string;
+  rate: number;
+  amount: number;
+  /** BOQ amount plus approved change orders linked to this line. */
+  budget: number;
+  actual: number;
+  remaining: number;
 };
 
 const TABS = [
-  { id: "costs", label: "Cost Entries" },
-  { id: "payments", label: "Payments" },
-  { id: "changes", label: "Change Orders" },
+  { id: "costs", label: "costs" },
+  { id: "payments", label: "payments" },
+  { id: "changes", label: "changeOrders" },
+  { id: "boq", label: "BOQ" },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
@@ -60,40 +93,57 @@ export function ProjectTabs({
   costs,
   payments,
   changeOrders,
+  boq,
+  unallocatedActual,
+  lookups,
 }: {
   projectId: string;
   costs: CostRow[];
   payments: PaymentRow[];
   changeOrders: ChangeOrderRow[];
+  boq: BoqRow[];
+  /** Costs that are not linked to any BOQ line. */
+  unallocatedActual: number;
+  lookups: Lookups;
 }) {
   const [tab, setTab] = useState<TabId>("costs");
+  const t = useT();
 
   return (
     <section>
-      <div role="tablist" className="mb-4 grid grid-cols-3 gap-1 rounded-xl bg-gray-200 p-1">
-        {TABS.map((t) => (
+      <div role="tablist" className="mb-4 grid grid-cols-4 gap-1 rounded-xl bg-gray-200 p-1">
+        {TABS.map((item) => (
           <button
-            key={t.id}
+            key={item.id}
             role="tab"
-            aria-selected={tab === t.id}
-            onClick={() => setTab(t.id)}
+            aria-selected={tab === item.id}
+            onClick={() => setTab(item.id)}
             className={clsx(
               "h-11 rounded-lg text-sm font-semibold",
-              tab === t.id ? "bg-white text-brand shadow" : "text-gray-600",
+              tab === item.id ? "bg-white text-brand shadow" : "text-gray-600",
             )}
           >
-            {t.label}
+            {item.label === "BOQ" ? "BOQ" : t[item.label]}
           </button>
         ))}
       </div>
 
       <div role="tabpanel">
-        {tab === "costs" ? <CostsPanel projectId={projectId} rows={costs} /> : null}
-        {tab === "payments" ? <PaymentsPanel projectId={projectId} rows={payments} /> : null}
-        {tab === "changes" ? <ChangeOrdersPanel projectId={projectId} rows={changeOrders} /> : null}
+        {tab === "costs" ? <CostsPanel projectId={projectId} rows={costs} lookups={lookups} /> : null}
+        {tab === "payments" ? <PaymentsPanel projectId={projectId} rows={payments} lookups={lookups} /> : null}
+        {tab === "changes" ? <ChangeOrdersPanel projectId={projectId} rows={changeOrders} lookups={lookups} /> : null}
+        {tab === "boq" ? <BoqPanel projectId={projectId} rows={boq} unallocatedActual={unallocatedActual} /> : null}
       </div>
     </section>
   );
+}
+
+function useFormatters() {
+  const locale: Locale = useLocale();
+  return {
+    formatRM: (value: number) => formatMoney(value, locale),
+    formatDate: (value: string) => formatDate(value, locale),
+  };
 }
 
 function TableShell({ children }: { children: React.ReactNode }) {
@@ -109,17 +159,18 @@ const actionsTh = <th className="w-28 px-3 py-2.5"><span className="sr-only">Act
 const th = "px-3 py-2.5 font-semibold text-gray-600";
 const td = "px-3 py-3 align-top";
 
-function CostsPanel({ projectId, rows }: { projectId: string; rows: CostRow[] }) {
+function CostsPanel({ projectId, rows, lookups }: { projectId: string; rows: CostRow[]; lookups: Lookups }) {
+  const { formatRM, formatDate } = useFormatters();
   return (
     <>
       <div className="mb-3 flex justify-end">
-        <AddCostForm projectId={projectId} />
+        <AddCostForm projectId={projectId} lookups={lookups} />
       </div>
       {rows.length === 0 ? (
         <EmptyState
           title="No costs logged"
           hint="Log the first material, labor or subcon cost for this job."
-          action={<AddCostForm projectId={projectId} />}
+          action={<AddCostForm projectId={projectId} lookups={lookups} />}
         />
       ) : (
         <TableShell>
@@ -140,12 +191,20 @@ function CostsPanel({ projectId, rows }: { projectId: string; rows: CostRow[] })
                 <td className={td}>
                   {row.description}
                   {row.vendor ? <span className="block text-xs text-gray-500">{row.vendor}</span> : null}
+                  {row.subconName ? <span className="block text-xs text-gray-500">Subcon: {row.subconName}</span> : null}
+                  {row.boqLabel ? <span className="block text-xs text-gray-500">BOQ: {row.boqLabel}</span> : null}
+                  {row.category === "SUBCON" ? (
+                    <div className="mt-1">
+                      <MarkPaidButton costId={row.id} paidAt={row.paidAt} />
+                    </div>
+                  ) : null}
                 </td>
                 <td className={`${td} text-right font-semibold`}>{formatRM(row.amount)}</td>
                 <td className={td}>
                   <div className="flex justify-end">
                     <EditCostButton
                       projectId={projectId}
+                      lookups={lookups}
                       id={row.id}
                       values={{
                         date: dateValue(row.date),
@@ -154,6 +213,8 @@ function CostsPanel({ projectId, rows }: { projectId: string; rows: CostRow[] })
                         amount: String(row.amount),
                         vendor: row.vendor ?? "",
                         reference: row.reference ?? "",
+                        subcontractorId: row.subcontractorId ?? "",
+                        boqLineId: row.boqLineId ?? "",
                       }}
                     />
                     <DeleteIconButton
@@ -172,17 +233,18 @@ function CostsPanel({ projectId, rows }: { projectId: string; rows: CostRow[] })
   );
 }
 
-function PaymentsPanel({ projectId, rows }: { projectId: string; rows: PaymentRow[] }) {
+function PaymentsPanel({ projectId, rows, lookups }: { projectId: string; rows: PaymentRow[]; lookups: Lookups }) {
+  const { formatRM, formatDate } = useFormatters();
   return (
     <>
       <div className="mb-3 flex justify-end">
-        <AddPaymentForm projectId={projectId} />
+        <AddPaymentForm projectId={projectId} lookups={lookups} />
       </div>
       {rows.length === 0 ? (
         <EmptyState
           title="No payments received"
           hint="Record each progress claim payment as it comes in."
-          action={<AddPaymentForm projectId={projectId} />}
+          action={<AddPaymentForm projectId={projectId} lookups={lookups} />}
         />
       ) : (
         <TableShell>
@@ -199,16 +261,21 @@ function PaymentsPanel({ projectId, rows }: { projectId: string; rows: PaymentRo
               <tr key={row.id}>
                 <td className={td}>{formatDate(row.date)}</td>
                 <td className={`${td} text-right font-semibold`}>{formatRM(row.amount)}</td>
-                <td className={td}>{row.reference ?? "—"}</td>
+                <td className={td}>
+                  {row.reference ?? "—"}
+                  {row.claimNumber ? <span className="block text-xs text-gray-500">Claim {row.claimNumber}</span> : null}
+                </td>
                 <td className={td}>
                   <div className="flex justify-end">
                     <EditPaymentButton
                       projectId={projectId}
+                      lookups={lookups}
                       id={row.id}
                       values={{
                         date: dateValue(row.date),
                         amount: String(row.amount),
                         reference: row.reference ?? "",
+                        claimId: row.claimId ?? "",
                       }}
                     />
                     <DeleteIconButton
@@ -227,7 +294,8 @@ function PaymentsPanel({ projectId, rows }: { projectId: string; rows: PaymentRo
   );
 }
 
-function ChangeOrdersPanel({ projectId, rows }: { projectId: string; rows: ChangeOrderRow[] }) {
+function ChangeOrdersPanel({ projectId, rows, lookups }: { projectId: string; rows: ChangeOrderRow[]; lookups: Lookups }) {
+  const { formatRM, formatDate } = useFormatters();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
@@ -246,13 +314,13 @@ function ChangeOrdersPanel({ projectId, rows }: { projectId: string; rows: Chang
   return (
     <>
       <div className="mb-3 flex justify-end">
-        <AddChangeOrderForm projectId={projectId} />
+        <AddChangeOrderForm projectId={projectId} lookups={lookups} />
       </div>
       {rows.length === 0 ? (
         <EmptyState
           title="No change orders"
           hint="Add a change order when the client asks for extra work or omits some."
-          action={<AddChangeOrderForm projectId={projectId} />}
+          action={<AddChangeOrderForm projectId={projectId} lookups={lookups} />}
         />
       ) : (
         <TableShell>
@@ -271,7 +339,10 @@ function ChangeOrdersPanel({ projectId, rows }: { projectId: string; rows: Chang
               return (
                 <tr key={row.id}>
                   <td className={td}>{formatDate(row.date)}</td>
-                  <td className={td}>{row.description}</td>
+                  <td className={td}>
+                    {row.description}
+                    {row.boqLabel ? <span className="block text-xs text-gray-500">BOQ: {row.boqLabel}</span> : null}
+                  </td>
                   <td className={`${td} text-right font-semibold`}>{formatRM(row.amount)}</td>
                   <td className={td}>
                     <Badge tone={tone[status] ?? "gray"}>{CHANGE_ORDER_LABELS[status] ?? row.status}</Badge>
@@ -290,11 +361,13 @@ function ChangeOrdersPanel({ projectId, rows }: { projectId: string; rows: Chang
                     <div className="flex justify-end">
                       <EditChangeOrderButton
                         projectId={projectId}
+                        lookups={lookups}
                         id={row.id}
                         values={{
                           date: dateValue(row.date),
                           description: row.description,
                           amount: String(row.amount),
+                          boqLineId: row.boqLineId ?? "",
                         }}
                       />
                       <DeleteIconButton
@@ -307,6 +380,75 @@ function ChangeOrdersPanel({ projectId, rows }: { projectId: string; rows: Chang
                 </tr>
               );
             })}
+          </tbody>
+        </TableShell>
+      )}
+    </>
+  );
+}
+
+function BoqPanel({ projectId, rows, unallocatedActual }: { projectId: string; rows: BoqRow[]; unallocatedActual: number }) {
+  const { formatRM } = useFormatters();
+  return (
+    <>
+      <div className="mb-3 flex justify-end">
+        <AddBoqLineForm projectId={projectId} />
+      </div>
+      {rows.length === 0 ? (
+        <EmptyState
+          title="No BOQ yet"
+          hint="Add the work items for this job, or convert an accepted quote to get one automatically."
+          action={<AddBoqLineForm projectId={projectId} />}
+        />
+      ) : (
+        <TableShell>
+          <thead className="bg-gray-50">
+            <tr>
+              <th className={th}>Item</th>
+              <th className={`${th} text-right`}>Qty × Rate</th>
+              <th className={`${th} text-right`}>Budget</th>
+              <th className={`${th} text-right`}>Actual</th>
+              <th className={`${th} text-right`}>Remaining</th>
+              {actionsTh}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {rows.map((row) => (
+              <tr key={row.id}>
+                <td className={td}>{row.description}</td>
+                <td className={`${td} text-right text-gray-600`}>
+                  {row.qty} {row.unit} × {formatRM(row.rate)}
+                </td>
+                <td className={`${td} text-right`}>{formatRM(row.budget)}</td>
+                <td className={`${td} text-right`}>{formatRM(row.actual)}</td>
+                <td className={`${td} text-right font-semibold ${row.remaining < 0 ? "text-loss" : "text-profit"}`}>
+                  {formatRM(row.remaining)}
+                </td>
+                <td className={td}>
+                  <div className="flex justify-end">
+                    <EditBoqLineButton
+                      projectId={projectId}
+                      id={row.id}
+                      values={{ description: row.description, qty: row.qty, unit: row.unit, rate: row.rate.toFixed(2) }}
+                    />
+                    <DeleteIconButton
+                      label="Delete BOQ line"
+                      message={`Delete "${row.description}" from the BOQ?`}
+                      onConfirm={() => deleteBoqLine(row.id)}
+                    />
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {unallocatedActual !== 0 ? (
+              <tr className="bg-gray-50">
+                <td className={td} colSpan={3}>
+                  Costs not linked to a BOQ line
+                </td>
+                <td className={`${td} text-right`}>{formatRM(unallocatedActual)}</td>
+                <td className={td} colSpan={2} />
+              </tr>
+            ) : null}
           </tbody>
         </TableShell>
       )}

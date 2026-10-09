@@ -12,37 +12,50 @@ model User {
   email        String   @unique
   passwordHash String
   name         String?
+  locale       String   @default("en")
   createdAt    DateTime @default(now())
 }
 
 model Project {
-  id            String        @id @default(cuid())
-  name          String
-  clientName    String?
-  contractValue Decimal
-  startDate     DateTime?
-  status        String        @default("ACTIVE")
-  costs         CostEntry[]
-  payments      Payment[]
-  changeOrders  ChangeOrder[]
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  id                String        @id @default(cuid())
+  name              String
+  clientName        String?
+  contractValue     Decimal
+  startDate         DateTime?
+  status            String        @default("ACTIVE")
+  sstEnabled        Boolean       @default(false)
+  sstRate           Decimal       @default(6.00)
+  lastClaimNumber   Int           @default(0)
+  retentionPercent  Decimal       @default(5.00)
+  retentionReleased Decimal       @default(0)
+  costs             CostEntry[]
+  payments          Payment[]
+  changeOrders      ChangeOrder[]
+  boqLines          BoqLine[]
+  claims            Claim[]
+  quote             Quote?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
 }
-
 
 model CostEntry {
-  id          String       @id @default(cuid())
-  projectId   String
-  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  date        DateTime
-  category    String
-  description String
-  amount      Decimal
-  vendor      String?
-  reference   String?
-  createdAt   DateTime     @default(now())
+  id              String         @id @default(cuid())
+  projectId       String
+  project         Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  date            DateTime
+  category        String
+  description     String
+  amount          Decimal
+  vendor          String?
+  reference       String?
+  /// Set on SUBCON costs once the subcontractor has been paid.
+  paidAt          DateTime?
+  subcontractorId String?
+  subcontractor   Subcontractor? @relation(fields: [subcontractorId], references: [id], onDelete: SetNull)
+  boqLineId       String?
+  boqLine         BoqLine?       @relation(fields: [boqLineId], references: [id], onDelete: SetNull)
+  createdAt       DateTime       @default(now())
 }
-
 
 model Payment {
   id        String   @id @default(cuid())
@@ -51,18 +64,96 @@ model Payment {
   date      DateTime
   amount    Decimal
   reference String?
+  claimId   String?
+  claim     Claim?   @relation(fields: [claimId], references: [id], onDelete: SetNull)
   createdAt DateTime @default(now())
 }
 
 model ChangeOrder {
-  id          String            @id @default(cuid())
+  id          String    @id @default(cuid())
   projectId   String
-  project     Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   date        DateTime
   description String
   amount      Decimal
-  status      String            @default("PENDING")
+  status      String    @default("PENDING")
   approvedAt  DateTime?
-  createdAt   DateTime          @default(now())
+  boqLineId   String?
+  boqLine     BoqLine?  @relation(fields: [boqLineId], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
 }
 
+/// One line of a project's bill of quantities: Qty x Rate = Amount.
+model BoqLine {
+  id           String        @id @default(cuid())
+  projectId    String
+  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  position     Int
+  description  String
+  qty          Decimal
+  unit         String
+  rate         Decimal
+  amount       Decimal
+  costs        CostEntry[]
+  changeOrders ChangeOrder[]
+  createdAt    DateTime      @default(now())
+}
+
+/// A formal progress claim. Money fields are snapshots taken when the claim is issued.
+model Claim {
+  id               String    @id @default(cuid())
+  projectId        String
+  project          Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  number           Int
+  date             DateTime
+  workDone         Decimal
+  sstAmount        Decimal
+  amountClaimed    Decimal
+  retentionPercent Decimal
+  retentionAmount  Decimal
+  previousClaimed  Decimal
+  netClaim         Decimal
+  payments         Payment[]
+  createdAt        DateTime  @default(now())
+
+  @@unique([projectId, number])
+}
+
+model Subcontractor {
+  id        String      @id @default(cuid())
+  name      String
+  contact   String?
+  trade     String?
+  bank      String?
+  costs     CostEntry[]
+  createdAt DateTime    @default(now())
+}
+
+model Quote {
+  id         String      @id @default(cuid())
+  number     Int         @unique
+  clientName String
+  title      String
+  date       DateTime
+  status     String      @default("DRAFT")
+  sstEnabled Boolean     @default(false)
+  sstRate    Decimal     @default(6.00)
+  notes      String?
+  projectId  String?     @unique
+  project    Project?    @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  lines      QuoteLine[]
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+}
+
+model QuoteLine {
+  id          String  @id @default(cuid())
+  quoteId     String
+  quote       Quote   @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  position    Int
+  description String
+  qty         Decimal
+  unit        String
+  unitPrice   Decimal
+  amount      Decimal
+}

@@ -4,7 +4,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { addPayment, updatePayment } from "@/app/actions";
 import { Button } from "@/components/ui/button";
-import { Field, Input } from "@/components/ui/field";
+import type { Lookups } from "@/components/projects/lookups";
+import { Field, Input, Select } from "@/components/ui/field";
 import { Modal, ModalButton } from "@/components/ui/modal";
 import { useCallback, useState } from "react";
 import { EditIconButton } from "./row-actions";
@@ -14,10 +15,12 @@ import { useSubmit } from "./use-submit";
 
 function Form({
   projectId,
+  lookups,
   close,
   editing,
 }: {
   projectId: string;
+  lookups: Lookups;
   close: () => void;
   editing?: { id: string; values: PaymentInput };
 }) {
@@ -28,7 +31,7 @@ function Form({
     formState: { errors },
   } = useForm<PaymentInput>({
     resolver: zodResolver(paymentSchema),
-    defaultValues: editing?.values ?? { date: todayInputValue(), amount: "", reference: "" },
+    defaultValues: editing?.values ?? { date: todayInputValue(), amount: "", reference: "", claimId: "" },
   });
 
   return (
@@ -39,6 +42,18 @@ function Form({
       <Field label="Amount (RM)" error={errors.amount?.message}>
         <Input {...register("amount")} type="number" step="0.01" inputMode="decimal" />
       </Field>
+      {lookups.claims.length > 0 ? (
+        <Field label="Against claim (optional)" error={errors.claimId?.message}>
+          <Select {...register("claimId")}>
+            <option value="">— Not linked to a claim —</option>
+            {lookups.claims.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      ) : null}
       <Field label="Reference / note (optional)" error={errors.reference?.message}>
         <Input {...register("reference")} placeholder="e.g. Progress claim 1" />
       </Field>
@@ -49,20 +64,22 @@ function Form({
   );
 }
 
-export function AddPaymentForm({ projectId }: { projectId: string }) {
+export function AddPaymentForm({ projectId, lookups }: { projectId: string; lookups: Lookups }) {
   return (
     <ModalButton label="+ Add Payment" title="Add payment">
-      {(close) => <Form projectId={projectId} close={close} />}
+      {(close) => <Form projectId={projectId} lookups={lookups} close={close} />}
     </ModalButton>
   );
 }
 
 export function EditPaymentButton({
   projectId,
+  lookups,
   id,
   values,
 }: {
   projectId: string;
+  lookups: Lookups;
   id: string;
   values: PaymentInput;
 }) {
@@ -72,7 +89,7 @@ export function EditPaymentButton({
     <>
       <EditIconButton label="Edit payment" onClick={() => setOpen(true)} />
       <Modal open={open} onClose={close} title="Edit payment">
-        <Form projectId={projectId} close={close} editing={{ id, values }} />
+        <Form projectId={projectId} lookups={lookups} close={close} editing={{ id, values }} />
       </Modal>
     </>
   );

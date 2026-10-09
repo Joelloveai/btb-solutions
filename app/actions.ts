@@ -1,10 +1,21 @@
 "use server";
 
+import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth";
+import { computeClaim } from "@/lib/claims";
+import { isLocale } from "@/lib/i18n";
 import { prisma } from "@/lib/prisma";
+import { calculateQuote } from "@/lib/quotes";
 import {
+  boqLineSchema,
   changeOrderSchema,
+  claimSchema,
+  paidDateSchema,
+  quoteSchema,
+  quoteStatusSchema,
+  releaseRetentionSchema,
+  subcontractorSchema,
   changeOrderStatusSchema,
   costSchema,
   paymentSchema,
@@ -17,6 +28,9 @@ export type ActionResult<T = undefined> =
 
 const toDate = (value: string) => new Date(`${value}T00:00:00.000Z`);
 const orNull = (value?: string) => (value && value.trim() ? value.trim() : null);
+
+/** Money now flows between pages (claims, receivables, clients, subcons), so refresh them all. */
+const revalidateAll = () => revalidatePath("/", "layout");
 
 function failure(error: unknown): ActionResult<never> {
   if (error instanceof Error && error.message === "Not signed in") {
@@ -38,11 +52,54 @@ export async function createProject(input: unknown): Promise<ActionResult<{ id: 
         clientName: orNull(v.clientName),
         contractValue: v.contractValue,
         startDate: v.startDate ? toDate(v.startDate) : null,
+        sstEnabled: v.sstEnabled,
+        retentionPercent: v.retentionPercent,
       },
     });
     revalidatePath("/dashboard");
     revalidatePath("/projects");
     return { ok: true, data: { id: project.id } };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+export async function updateProject(id: string, input: unknown): Promise<ActionResult> {
+  try {
+    await requireSession();
+    const parsed = projectSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+    const v = parsed.data;
+    await prisma.project.update({
+      where: { id },
+      data: {
+        name: v.name,
+        clientName: orNull(v.clientName),
+        contractValue: v.contractValue,
+        startDate: v.startDate ? toDate(v.startDate) : null,
+        sstEnabled: v.sstEnabled,
+        retentionPercent: v.retentionPercent,
+        ...(v.status ? { status: v.status } : {}),
+      },
+    });
+    revalidateAll();
+    revalidatePath(`/projects/${id}`);
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+export async function setLocale(locale: unknown): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    if (!isLocale(locale)) return { ok: false, error: "Unknown language" };
+    await prisma.user.update({
+      where: { email: String(session.user?.email).toLowerCase() },
+      data: { locale },
+    });
+    revalidatePath("/", "layout");
+    return { ok: true };
   } catch (error) {
     return failure(error);
   }
@@ -63,10 +120,11 @@ export async function addCost(projectId: string, input: unknown): Promise<Action
         amount: v.amount,
         vendor: orNull(v.vendor),
         reference: orNull(v.reference),
+        subcontractorId: v.category === "SUBCON" ? orNull(v.subcontractorId) : null,
+        boqLineId: orNull(v.boqLineId),
       },
     });
-    revalidatePath("/dashboard");
-    revalidatePath(`/projects/${projectId}`);
+    revalidateAll();
     return { ok: true };
   } catch (error) {
     return failure(error);
@@ -85,10 +143,10 @@ export async function addPayment(projectId: string, input: unknown): Promise<Act
         date: toDate(v.date),
         amount: v.amount,
         reference: orNull(v.reference),
+        claimId: orNull(v.claimId),
       },
     });
-    revalidatePath("/dashboard");
-    revalidatePath(`/projects/${projectId}`);
+    revalidateAll();
     return { ok: true };
   } catch (error) {
     return failure(error);
@@ -108,10 +166,10 @@ export async function addChangeOrder(projectId: string, input: unknown): Promise
         description: v.description,
         amount: v.amount,
         status: "PENDING",
+        boqLineId: orNull(v.boqLineId),
       },
     });
-    revalidatePath("/dashboard");
-    revalidatePath(`/projects/${projectId}`);
+    revalidateAll();
     return { ok: true };
   } catch (error) {
     return failure(error);
@@ -133,8 +191,7 @@ export async function setChangeOrderStatus(
         approvedAt: parsed.data === "APPROVED" ? new Date() : null,
       },
     });
-    revalidatePath("/dashboard");
-    revalidatePath(`/projects/${updated.projectId}`);
+    revalidateAll();
     return { ok: true };
   } catch (error) {
     return failure(error);
@@ -145,8 +202,7 @@ async function mutateRow<T extends { projectId: string }>(run: () => Promise<T>)
   try {
     await requireSession();
     const row = await run();
-    revalidatePath("/dashboard");
-    revalidatePath(`/projects/${row.projectId}`);
+    revalidateAll();
     return { ok: true };
   } catch (error) {
     return failure(error);
@@ -167,6 +223,9 @@ export async function updateCost(id: string, input: unknown): Promise<ActionResu
         amount: v.amount,
         vendor: orNull(v.vendor),
         reference: orNull(v.reference),
+        subcontractorId: v.category === "SUBCON" ? orNull(v.subcontractorId) : null,
+        boqLineId: orNull(v.boqLineId),
+        ...(v.category === "SUBCON" ? {} : { paidAt: null }),
       },
     }),
   );
@@ -179,7 +238,7 @@ export async function updatePayment(id: string, input: unknown): Promise<ActionR
   return mutateRow(() =>
     prisma.payment.update({
       where: { id },
-      data: { date: toDate(v.date), amount: v.amount, reference: orNull(v.reference) },
+      data: { date: toDate(v.date), amount: v.amount, reference: orNull(v.reference), claimId: orNull(v.claimId) },
     }),
   );
 }
@@ -191,7 +250,7 @@ export async function updateChangeOrder(id: string, input: unknown): Promise<Act
   return mutateRow(() =>
     prisma.changeOrder.update({
       where: { id },
-      data: { date: toDate(v.date), description: v.description, amount: v.amount },
+      data: { date: toDate(v.date), description: v.description, amount: v.amount, boqLineId: orNull(v.boqLineId) },
     }),
   );
 }
@@ -206,4 +265,350 @@ export async function deletePayment(id: string): Promise<ActionResult> {
 
 export async function deleteChangeOrder(id: string): Promise<ActionResult> {
   return mutateRow(() => prisma.changeOrder.delete({ where: { id } }));
+}
+
+// ---------------------------------------------------------------------------
+// Quotes
+// ---------------------------------------------------------------------------
+
+function quoteLineData(lines: { description: string; qty: string; unit: string; unitPrice: string }[]) {
+  const { lineAmounts } = calculateQuote(lines, false);
+  return lines.map((l, i) => ({
+    position: i,
+    description: l.description,
+    qty: l.qty,
+    unit: l.unit,
+    unitPrice: l.unitPrice,
+    amount: lineAmounts[i].toFixed(2),
+  }));
+}
+
+export async function createQuote(input: unknown): Promise<ActionResult<{ id: string }>> {
+  try {
+    await requireSession();
+    const parsed = quoteSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+    const v = parsed.data;
+    const quote = await prisma.$transaction(async (tx) => {
+      const last = await tx.quote.aggregate({ _max: { number: true } });
+      return tx.quote.create({
+        data: {
+          number: (last._max.number ?? 0) + 1,
+          clientName: v.clientName,
+          title: v.title,
+          date: toDate(v.date),
+          sstEnabled: v.sstEnabled,
+          status: v.status,
+          notes: orNull(v.notes),
+          lines: { create: quoteLineData(v.lines) },
+        },
+      });
+    });
+    revalidateAll();
+    return { ok: true, data: { id: quote.id } };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+export async function updateQuote(id: string, input: unknown): Promise<ActionResult<{ id: string }>> {
+  try {
+    await requireSession();
+    const parsed = quoteSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+    const v = parsed.data;
+    const existing = await prisma.quote.findUnique({ where: { id } });
+    if (!existing) return { ok: false, error: "Quote not found" };
+    if (existing.projectId) return { ok: false, error: "This quote is already a project and can no longer be edited." };
+    await prisma.$transaction([
+      prisma.quoteLine.deleteMany({ where: { quoteId: id } }),
+      prisma.quote.update({
+        where: { id },
+        data: {
+          clientName: v.clientName,
+          title: v.title,
+          date: toDate(v.date),
+          sstEnabled: v.sstEnabled,
+          status: v.status,
+          notes: orNull(v.notes),
+          lines: { create: quoteLineData(v.lines) },
+        },
+      }),
+    ]);
+    revalidateAll();
+    return { ok: true, data: { id } };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+export async function setQuoteStatus(id: string, status: unknown): Promise<ActionResult> {
+  try {
+    await requireSession();
+    const parsed = quoteStatusSchema.safeParse(status);
+    if (!parsed.success) return { ok: false, error: "Unknown status" };
+    const existing = await prisma.quote.findUnique({ where: { id } });
+    if (!existing) return { ok: false, error: "Quote not found" };
+    if (existing.projectId) return { ok: false, error: "This quote is already a project." };
+    await prisma.quote.update({ where: { id }, data: { status: parsed.data } });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+/** An accepted quote becomes a project: same line items (as the BOQ) and the quote subtotal as contract value. */
+export async function convertQuoteToProject(id: string): Promise<ActionResult<{ id: string }>> {
+  try {
+    await requireSession();
+    const project = await prisma.$transaction(async (tx) => {
+      const quote = await tx.quote.findUnique({ where: { id }, include: { lines: { orderBy: { position: "asc" } } } });
+      if (!quote) throw new Error("Quote not found");
+      if (quote.projectId) throw new Error("This quote has already been converted.");
+      if (quote.status !== "ACCEPTED") throw new Error("Only an accepted quote can be converted.");
+      const totals = calculateQuote(quote.lines, false);
+      if (totals.subtotal <= 0) throw new Error("The quote total must be more than 0.");
+      const created = await tx.project.create({
+        data: {
+          name: quote.title,
+          clientName: quote.clientName,
+          contractValue: totals.subtotal.toFixed(2),
+          sstEnabled: quote.sstEnabled,
+          sstRate: quote.sstRate,
+          boqLines: {
+            create: quote.lines.map((l) => ({
+              position: l.position,
+              description: l.description,
+              qty: l.qty,
+              unit: l.unit,
+              rate: l.unitPrice,
+              amount: l.amount,
+            })),
+          },
+        },
+      });
+      await tx.quote.update({ where: { id }, data: { projectId: created.id } });
+      return created;
+    });
+    revalidateAll();
+    return { ok: true, data: { id: project.id } };
+  } catch (error) {
+    if (error instanceof Error && /quote|accepted|converted/i.test(error.message)) {
+      return { ok: false, error: error.message };
+    }
+    return failure(error);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// BOQ
+// ---------------------------------------------------------------------------
+
+function boqData(v: { description: string; qty: string; unit: string; rate: string }) {
+  const amount = new Prisma.Decimal(v.qty).times(v.rate).toDP(2);
+  return { description: v.description, qty: v.qty, unit: v.unit, rate: v.rate, amount: amount.toFixed(2) };
+}
+
+export async function addBoqLine(projectId: string, input: unknown): Promise<ActionResult> {
+  try {
+    await requireSession();
+    const parsed = boqLineSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+    const last = await prisma.boqLine.aggregate({ where: { projectId }, _max: { position: true } });
+    await prisma.boqLine.create({
+      data: { projectId, position: (last._max.position ?? -1) + 1, ...boqData(parsed.data) },
+    });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+export async function updateBoqLine(id: string, input: unknown): Promise<ActionResult> {
+  try {
+    await requireSession();
+    const parsed = boqLineSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+    await prisma.boqLine.update({ where: { id }, data: boqData(parsed.data) });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+export async function deleteBoqLine(id: string): Promise<ActionResult> {
+  try {
+    await requireSession();
+    await prisma.boqLine.delete({ where: { id } });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Claims and retention
+// ---------------------------------------------------------------------------
+
+export async function issueClaim(projectId: string, input: unknown): Promise<ActionResult<{ id: string }>> {
+  try {
+    await requireSession();
+    const parsed = claimSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+    const v = parsed.data;
+    const claim = await prisma.$transaction(async (tx) => {
+      const project = await tx.project.findUniqueOrThrow({
+        where: { id: projectId },
+        include: { claims: true, changeOrders: true },
+      });
+      const sum = (values: Prisma.Decimal.Value[]) =>
+        values.reduce<Prisma.Decimal>((t, x) => t.plus(x), new Prisma.Decimal(0));
+      const previousWork = sum(project.claims.map((c) => c.workDone));
+      const approved = sum(project.changeOrders.filter((c) => c.status === "APPROVED").map((c) => c.amount));
+      const ceiling = project.contractValue.plus(approved);
+      if (previousWork.plus(v.workDone).greaterThan(ceiling)) {
+        const left = ceiling.minus(previousWork);
+        throw new Error(`That is more than the contract. At most RM ${left.toFixed(2)} is left to claim.`);
+      }
+      const figures = computeClaim({
+        workDone: v.workDone,
+        retentionPercent: project.retentionPercent,
+        sstEnabled: project.sstEnabled,
+        sstRate: project.sstRate,
+        previousClaimed: sum(project.claims.map((c) => c.amountClaimed)),
+      });
+      const bumped = await tx.project.update({
+        where: { id: projectId },
+        data: { lastClaimNumber: { increment: 1 } },
+      });
+      return tx.claim.create({
+        data: {
+          projectId,
+          number: bumped.lastClaimNumber,
+          date: toDate(v.date),
+          workDone: figures.workDone.toFixed(2),
+          sstAmount: figures.sstAmount.toFixed(2),
+          amountClaimed: figures.amountClaimed.toFixed(2),
+          retentionPercent: figures.retentionPercent.toFixed(2),
+          retentionAmount: figures.retentionAmount.toFixed(2),
+          previousClaimed: figures.previousClaimed.toFixed(2),
+          netClaim: figures.netClaim.toFixed(2),
+        },
+      });
+    });
+    revalidateAll();
+    return { ok: true, data: { id: claim.id } };
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("That is more than")) {
+      return { ok: false, error: error.message };
+    }
+    return failure(error);
+  }
+}
+
+/** Only the latest claim, and only while nothing has been paid against it, can be taken back. */
+export async function deleteClaim(id: string): Promise<ActionResult> {
+  try {
+    await requireSession();
+    await prisma.$transaction(async (tx) => {
+      const claim = await tx.claim.findUniqueOrThrow({ where: { id }, include: { payments: true } });
+      const project = await tx.project.findUniqueOrThrow({ where: { id: claim.projectId } });
+      if (claim.number !== project.lastClaimNumber) throw new Error("claim: only the latest claim can be deleted.");
+      if (claim.payments.length > 0) throw new Error("claim: this claim has payments recorded against it.");
+      await tx.claim.delete({ where: { id } });
+      await tx.project.update({ where: { id: project.id }, data: { lastClaimNumber: { decrement: 1 } } });
+    });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("claim: ")) {
+      return { ok: false, error: error.message.slice(7) };
+    }
+    return failure(error);
+  }
+}
+
+/** Records the retention money arriving: a payment on the project plus a running released total. */
+export async function releaseRetention(projectId: string, input: unknown): Promise<ActionResult> {
+  try {
+    await requireSession();
+    const parsed = releaseRetentionSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+    const v = parsed.data;
+    await prisma.$transaction(async (tx) => {
+      const project = await tx.project.findUniqueOrThrow({ where: { id: projectId }, include: { claims: true } });
+      const held = project.claims.reduce((t, c) => t.plus(c.retentionAmount), new Prisma.Decimal(0));
+      const outstanding = held.minus(project.retentionReleased);
+      if (new Prisma.Decimal(v.amount).greaterThan(outstanding)) {
+        throw new Error(`release: only RM ${outstanding.toFixed(2)} of retention is outstanding.`);
+      }
+      await tx.payment.create({
+        data: { projectId, date: toDate(v.date), amount: v.amount, reference: "Retention release" },
+      });
+      await tx.project.update({ where: { id: projectId }, data: { retentionReleased: { increment: v.amount } } });
+    });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("release: ")) {
+      return { ok: false, error: error.message.slice(9) };
+    }
+    return failure(error);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Subcontractors
+// ---------------------------------------------------------------------------
+
+export async function createSubcontractor(input: unknown): Promise<ActionResult<{ id: string }>> {
+  try {
+    await requireSession();
+    const parsed = subcontractorSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+    const v = parsed.data;
+    const sub = await prisma.subcontractor.create({
+      data: { name: v.name, contact: orNull(v.contact), trade: orNull(v.trade), bank: orNull(v.bank) },
+    });
+    revalidateAll();
+    return { ok: true, data: { id: sub.id } };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+export async function updateSubcontractor(id: string, input: unknown): Promise<ActionResult> {
+  try {
+    await requireSession();
+    const parsed = subcontractorSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+    const v = parsed.data;
+    await prisma.subcontractor.update({
+      where: { id },
+      data: { name: v.name, contact: orNull(v.contact), trade: orNull(v.trade), bank: orNull(v.bank) },
+    });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+/** Pass a date to mark a subcon cost as paid on that day, or null to undo it. */
+export async function setCostPaid(costId: string, paidDate: string | null): Promise<ActionResult> {
+  try {
+    await requireSession();
+    if (paidDate !== null && !paidDateSchema.safeParse(paidDate).success) return { ok: false, error: "Pick a date" };
+    const cost = await prisma.costEntry.findUniqueOrThrow({ where: { id: costId } });
+    if (cost.category !== "SUBCON") return { ok: false, error: "Only subcon costs can be marked as paid." };
+    await prisma.costEntry.update({ where: { id: costId }, data: { paidAt: paidDate ? toDate(paidDate) : null } });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
 }

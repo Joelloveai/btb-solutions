@@ -35,3 +35,13 @@ export const CHANGE_ORDER_LABELS: Record<ChangeOrderStatus, string> = {
   APPROVED: "Approved",
   REJECTED: "Rejected",
 };
+
+export const QUOTE_STATUSES = ["DRAFT", "SENT", "ACCEPTED", "REJECTED"] as const;
+export type QuoteStatus = (typeof QUOTE_STATUSES)[number];
+
+export const QUOTE_STATUS_LABELS: Record<QuoteStatus, string> = {
+  DRAFT: "Draft",
+  SENT: "Sent",
+  ACCEPTED: "Accepted",
+  REJECTED: "Rejected",
+};

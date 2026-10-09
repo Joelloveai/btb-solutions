@@ -1,7 +1,8 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
+import type { Lookups } from "@/components/projects/lookups";
 import { addCost, updateCost } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/field";
@@ -15,16 +16,19 @@ import { useSubmit } from "./use-submit";
 
 function Form({
   projectId,
+  lookups,
   close,
   editing,
 }: {
   projectId: string;
+  lookups: Lookups;
   close: () => void;
   editing?: { id: string; values: CostInput };
 }) {
   const { pending, submit } = useSubmit(editing ? "Cost updated" : "Cost added", close);
   const {
     register,
+    control,
     handleSubmit,
     formState: { errors },
   } = useForm<CostInput>({
@@ -36,8 +40,11 @@ function Form({
       amount: "",
       vendor: "",
       reference: "",
+      subcontractorId: "",
+      boqLineId: "",
     },
   });
+  const category = useWatch({ control, name: "category" });
 
   return (
     <form onSubmit={handleSubmit((values) => submit(() => (editing ? updateCost(editing.id, values) : addCost(projectId, values))))} className="space-y-3">
@@ -59,6 +66,30 @@ function Form({
       <Field label="Amount (RM)" error={errors.amount?.message}>
         <Input {...register("amount")} type="number" step="0.01" inputMode="decimal" />
       </Field>
+      {category === "SUBCON" ? (
+        <Field label="Subcontractor" error={errors.subcontractorId?.message}>
+          <Select {...register("subcontractorId")}>
+            <option value="">— Not linked —</option>
+            {lookups.subcons.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      ) : null}
+      {lookups.boqLines.length > 0 ? (
+        <Field label="BOQ line (optional)" error={errors.boqLineId?.message}>
+          <Select {...register("boqLineId")}>
+            <option value="">— Not linked —</option>
+            {lookups.boqLines.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      ) : null}
       <Field label="Vendor (optional)" error={errors.vendor?.message}>
         <Input {...register("vendor")} />
       </Field>
@@ -72,20 +103,22 @@ function Form({
   );
 }
 
-export function AddCostForm({ projectId }: { projectId: string }) {
+export function AddCostForm({ projectId, lookups }: { projectId: string; lookups: Lookups }) {
   return (
     <ModalButton label="+ Add Cost" title="Add cost">
-      {(close) => <Form projectId={projectId} close={close} />}
+      {(close) => <Form projectId={projectId} lookups={lookups} close={close} />}
     </ModalButton>
   );
 }
 
 export function EditCostButton({
   projectId,
+  lookups,
   id,
   values,
 }: {
   projectId: string;
+  lookups: Lookups;
   id: string;
   values: CostInput;
 }) {
@@ -95,7 +128,7 @@ export function EditCostButton({
     <>
       <EditIconButton label="Edit cost" onClick={() => setOpen(true)} />
       <Modal open={open} onClose={close} title="Edit cost">
-        <Form projectId={projectId} close={close} editing={{ id, values }} />
+        <Form projectId={projectId} lookups={lookups} close={close} editing={{ id, values }} />
       </Modal>
     </>
   );
