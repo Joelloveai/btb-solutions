@@ -21,16 +21,21 @@ async function main() {
 
   await prisma.quote.deleteMany();
   await prisma.project.deleteMany();
+  await prisma.client.deleteMany();
   await prisma.subcontractor.deleteMany();
 
   const electrician = await prisma.subcontractor.create({
     data: { name: "Ah Seng Electrical", contact: "012-345 6789", trade: "Electrical", bank: "Maybank 5123 4567 8901" },
   });
 
+  const hafiz = await prisma.client.create({ data: { name: "En. Hafiz", phone: "013-222 3344" } });
+  const lim = await prisma.client.create({ data: { name: "Madam Lim", phone: "016-888 9900" } });
+
   const tamanDesa = await prisma.project.create({
     data: {
       name: "Taman Desa Terrace Renovation",
       clientName: "En. Hafiz",
+      clientId: hafiz.id,
       contractValue: "280000.00",
       startDate: day("2026-08-03"),
       lastClaimNumber: 1,
@@ -79,6 +84,7 @@ async function main() {
     data: {
       name: "Bangsar Shop Lot Fit-Out",
       clientName: "Madam Lim",
+      clientId: lim.id,
       contractValue: "120000.00",
       startDate: day("2026-09-01"),
       costs: {

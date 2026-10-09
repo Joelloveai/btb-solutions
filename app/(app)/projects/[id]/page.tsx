@@ -10,6 +10,7 @@ import { formatRM } from "@/lib/format";
 import { getT } from "@/lib/locale";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
+import { LinkClientButton } from "@/components/clients/link-client-button";
 import { EditProjectButton } from "@/components/forms/edit-project-form";
 
 export const dynamic = "force-dynamic";
@@ -86,6 +87,12 @@ export default async function ProjectPage({ params }: { params: { id: string } }
             ? ` (incl. ${money(totals.approvedChangeOrders)} approved changes)`
             : ""}
         </p>
+        {!project.clientId && project.clientName ? (
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-600">
+            <span>This client is only a typed name.</span>
+            <LinkClientButton projectId={project.id} />
+          </div>
+        ) : null}
         {project.sstEnabled ? (
           <p className="text-sm text-slate-600" data-testid="sst-line">
             SST ({Number(project.sstRate)}%): {money(totals.sstAmount)}
@@ -96,7 +103,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
             id={project.id}
             values={{
               name: project.name,
-              clientName: project.clientName ?? "",
+              clientId: project.clientId ?? "",
               contractValue: project.contractValue.toFixed(2),
               startDate: project.startDate ? project.startDate.toISOString().slice(0, 10) : "",
               sstEnabled: project.sstEnabled,

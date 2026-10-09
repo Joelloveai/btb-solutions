@@ -11,6 +11,7 @@ import {
   boqLineSchema,
   changeOrderSchema,
   claimSchema,
+  clientSchema,
   paidDateSchema,
   quoteSchema,
   quoteStatusSchema,
@@ -40,16 +41,22 @@ function failure(error: unknown): ActionResult<never> {
   return { ok: false, error: "Something went wrong. Please try again." };
 }
 
+async function findClient(id?: string) {
+  return id ? prisma.client.findUnique({ where: { id } }) : null;
+}
+
 export async function createProject(input: unknown): Promise<ActionResult<{ id: string }>> {
   try {
     await requireSession();
     const parsed = projectSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
     const v = parsed.data;
+    const client = await findClient(v.clientId);
     const project = await prisma.project.create({
       data: {
         name: v.name,
-        clientName: orNull(v.clientName),
+        clientId: client?.id ?? null,
+        clientName: client?.name ?? null,
         contractValue: v.contractValue,
         startDate: v.startDate ? toDate(v.startDate) : null,
         sstEnabled: v.sstEnabled,
@@ -70,11 +77,19 @@ export async function updateProject(id: string, input: unknown): Promise<ActionR
     const parsed = projectSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
     const v = parsed.data;
+    const client = await findClient(v.clientId);
+    const existing = await prisma.project.findUniqueOrThrow({ where: { id } });
+    // No client picked: unlink a linked project, but keep the typed name on an old unlinked one.
+    const clientData = client
+      ? { clientId: client.id, clientName: client.name }
+      : existing.clientId
+        ? { clientId: null, clientName: null }
+        : {};
     await prisma.project.update({
       where: { id },
       data: {
         name: v.name,
-        clientName: orNull(v.clientName),
+        ...clientData,
         contractValue: v.contractValue,
         startDate: v.startDate ? toDate(v.startDate) : null,
         sstEnabled: v.sstEnabled,
@@ -606,6 +621,62 @@ export async function setCostPaid(costId: string, paidDate: string | null): Prom
     const cost = await prisma.costEntry.findUniqueOrThrow({ where: { id: costId } });
     if (cost.category !== "SUBCON") return { ok: false, error: "Only subcon costs can be marked as paid." };
     await prisma.costEntry.update({ where: { id: costId }, data: { paidAt: paidDate ? toDate(paidDate) : null } });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Clients
+// ---------------------------------------------------------------------------
+
+export async function listClients(): Promise<ActionResult<{ id: string; name: string }[]>> {
+  try {
+    await requireSession();
+    const clients = await prisma.client.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } });
+    return { ok: true, data: clients };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+export async function createClient(input: unknown): Promise<ActionResult<{ id: string; name: string }>> {
+  try {
+    await requireSession();
+    const parsed = clientSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+    const v = parsed.data;
+    const client = await prisma.client.create({
+      data: {
+        name: v.name,
+        contactPerson: orNull(v.contactPerson),
+        phone: orNull(v.phone),
+        email: orNull(v.email),
+        address: orNull(v.address),
+        notes: orNull(v.notes),
+      },
+    });
+    revalidateAll();
+    return { ok: true, data: { id: client.id, name: client.name } };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+/** One-time upgrade for a project that only has a typed client name: attach an existing client of that name, or create one. */
+export async function linkProjectToClient(projectId: string): Promise<ActionResult> {
+  try {
+    await requireSession();
+    const project = await prisma.project.findUniqueOrThrow({ where: { id: projectId } });
+    const name = project.clientName?.trim();
+    if (project.clientId || !name) return { ok: false, error: "This project has no client name to link." };
+    const all = await prisma.client.findMany();
+    const client =
+      all.find((c) => c.name.trim().toLowerCase() === name.toLowerCase()) ??
+      (await prisma.client.create({ data: { name } }));
+    await prisma.project.update({ where: { id: projectId }, data: { clientId: client.id, clientName: client.name } });
     revalidateAll();
     return { ok: true };
   } catch (error) {

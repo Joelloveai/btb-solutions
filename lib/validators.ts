@@ -19,7 +19,7 @@ const optionalText = z.string().trim().max(200).optional().or(z.literal(""));
 
 export const projectSchema = z.object({
   name: z.string().trim().min(1, "Enter a project name").max(120),
-  clientName: optionalText,
+  clientId: z.string().optional().or(z.literal("")),
   contractValue: positiveMoney,
   startDate: dateString.optional().or(z.literal("")),
   sstEnabled: z.boolean(),
@@ -112,6 +112,15 @@ export const subcontractorSchema = z.object({
   bank: optionalText,
 });
 
+export const clientSchema = z.object({
+  name: z.string().trim().min(1, "Enter the client name").max(120),
+  contactPerson: optionalText,
+  phone: optionalText,
+  email: z.string().trim().max(200).email("Enter a valid email").optional().or(z.literal("")),
+  address: z.string().trim().max(300).optional().or(z.literal("")),
+  notes: z.string().trim().max(1000).optional().or(z.literal("")),
+});
+
 export const paidDateSchema = dateString;
 
 export type ProjectInput = z.infer<typeof projectSchema>;
@@ -122,3 +131,4 @@ export type QuoteInput = z.infer<typeof quoteSchema>;
 export type BoqLineInput = z.infer<typeof boqLineSchema>;
 export type ClaimInput = z.infer<typeof claimSchema>;
 export type SubcontractorInput = z.infer<typeof subcontractorSchema>;
+export type ClientInput = z.infer<typeof clientSchema>;

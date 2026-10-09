@@ -1,6 +1,7 @@
 "use client";
 
-import type { UseFormRegister } from "react-hook-form";
+import { useWatch, type Control, type UseFormRegister, type UseFormSetValue } from "react-hook-form";
+import { ClientPicker } from "@/components/clients/client-picker";
 import { Field, Input, Select } from "@/components/ui/field";
 import { PROJECT_STATUSES, PROJECT_STATUS_LABELS } from "@/lib/constants";
 import type { ProjectInput } from "@/lib/validators";
@@ -8,21 +9,24 @@ import type { ProjectInput } from "@/lib/validators";
 /** Shared by the create and edit project forms. */
 export function ProjectFields({
   register,
+  control,
+  setValue,
   errors,
   showStatus = false,
 }: {
   register: UseFormRegister<ProjectInput>;
+  control: Control<ProjectInput>;
+  setValue: UseFormSetValue<ProjectInput>;
   errors: Partial<Record<keyof ProjectInput, { message?: string }>>;
   showStatus?: boolean;
 }) {
+  const clientId = useWatch({ control, name: "clientId" }) ?? "";
   return (
     <>
       <Field label="Project name" error={errors.name?.message}>
         <Input {...register("name")} placeholder="e.g. Taman Sri Petaling Renovation" />
       </Field>
-      <Field label="Client (optional)" error={errors.clientName?.message}>
-        <Input {...register("clientName")} />
-      </Field>
+      <ClientPicker value={clientId} onChange={(id) => setValue("clientId", id)} />
       <Field label="Contract value (RM)" error={errors.contractValue?.message}>
         <Input {...register("contractValue")} type="number" step="0.01" inputMode="decimal" placeholder="150000" />
       </Field>

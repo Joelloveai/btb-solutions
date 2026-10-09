@@ -13,16 +13,18 @@ function Form({ close }: { close: () => void }) {
   const { pending, submit } = useSubmit("Project created", close);
   const {
     register,
+    control,
+    setValue,
     handleSubmit,
     formState: { errors },
   } = useForm<ProjectInput>({
     resolver: zodResolver(projectSchema),
-    defaultValues: { name: "", clientName: "", contractValue: "", startDate: "", sstEnabled: false, retentionPercent: "5.00" },
+    defaultValues: { name: "", clientId: "", contractValue: "", startDate: "", sstEnabled: false, retentionPercent: "5.00" },
   });
 
   return (
     <form onSubmit={handleSubmit((values) => submit(() => createProject(values)))} className="space-y-3">
-      <ProjectFields register={register} errors={errors} />
+      <ProjectFields register={register} control={control} setValue={setValue} errors={errors} />
       <Button type="submit" className="w-full" disabled={pending}>
         {pending ? "Saving…" : "Create project"}
       </Button>

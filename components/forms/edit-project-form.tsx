@@ -14,13 +14,15 @@ function Form({ id, values, close }: { id: string; values: ProjectInput; close: 
   const { pending, submit } = useSubmit("Project updated", close);
   const {
     register,
+    control,
+    setValue,
     handleSubmit,
     formState: { errors },
   } = useForm<ProjectInput>({ resolver: zodResolver(projectSchema), defaultValues: values });
 
   return (
     <form onSubmit={handleSubmit((v) => submit(() => updateProject(id, v)))} className="space-y-3">
-      <ProjectFields register={register} errors={errors} showStatus />
+      <ProjectFields register={register} control={control} setValue={setValue} errors={errors} showStatus />
       <Button type="submit" className="w-full" disabled={pending}>
         {pending ? "Saving…" : "Save project"}
       </Button>
