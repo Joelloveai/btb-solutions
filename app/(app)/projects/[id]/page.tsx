@@ -120,12 +120,12 @@ export default async function ProjectPage({ params }: { params: { id: string } }
         </div>
       </header>
 
-      <div className="mb-6 grid gap-3 sm:grid-cols-3">
+      <div className="mb-4 grid grid-cols-2 gap-2 sm:mb-6 sm:grid-cols-3 sm:gap-3">
         <Summary label="Total Costs" value={money(totals.totalCosts)} testId="total-costs" />
         <Summary label="Total Payments" value={money(totals.totalPayments)} testId="total-payments" />
-        <div className={clsx("rounded-xl border p-4", inProfit ? "border-profit/30 bg-profit-light" : "border-loss/30 bg-loss-light")}>
+        <div className={clsx("col-span-2 rounded-xl border p-3 sm:col-span-1 sm:p-4", inProfit ? "border-profit/30 bg-profit-light" : "border-loss/30 bg-loss-light")}>
           <p className="text-sm text-slate-600">Outstanding Balance</p>
-          <p className="text-xl font-bold" data-testid="outstanding">
+          <p className="font-mono text-lg font-bold sm:text-xl" data-testid="outstanding">
             {money(totals.outstandingBalance)}
           </p>
           <p className={clsx("mt-1 text-sm font-semibold", inProfit ? "text-profit-dark" : "text-loss-dark")}>
@@ -179,9 +179,9 @@ export default async function ProjectPage({ params }: { params: { id: string } }
 
 function Summary({ label, value, testId }: { label: string; value: string; testId: string }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
-      <p className="text-sm text-slate-600">{label}</p>
-      <p className="text-xl font-bold" data-testid={testId}>
+    <div className="rounded-xl border border-slate-200 bg-white p-3 sm:p-4">
+      <p className="text-xs text-slate-600 sm:text-sm">{label}</p>
+      <p className="font-mono text-base font-bold sm:text-xl" data-testid={testId}>
         {value}
       </p>
     </div>
@@ -202,20 +202,20 @@ function RetentionCard({
   if (summary.retentionHeld === 0 && summary.retentionReleased === 0) return null;
   const canRelease = status === "COMPLETED" && summary.retentionOutstanding > 0;
   return (
-    <section className="mb-6 rounded-xl border border-slate-200 bg-white p-4" aria-label="Retention">
+    <section className="mb-4 rounded-xl border border-slate-200 bg-white p-3 sm:mb-6 sm:p-4" aria-label="Retention">
       <h2 className="mb-2 font-bold">Retention</h2>
-      <dl className="grid gap-3 sm:grid-cols-3">
+      <dl className="grid grid-cols-3 gap-2 sm:gap-3">
         <div>
-          <dt className="text-sm text-slate-600">Total Retention Held</dt>
-          <dd className="font-bold" data-testid="retention-held">{money(summary.retentionHeld)}</dd>
+          <dt className="text-xs text-slate-600 sm:text-sm">Total Retention Held</dt>
+          <dd className="whitespace-nowrap font-mono text-sm font-bold sm:text-base" data-testid="retention-held">{money(summary.retentionHeld)}</dd>
         </div>
         <div>
-          <dt className="text-sm text-slate-600">Retention Released</dt>
-          <dd className="font-bold" data-testid="retention-released">{money(summary.retentionReleased)}</dd>
+          <dt className="text-xs text-slate-600 sm:text-sm">Retention Released</dt>
+          <dd className="whitespace-nowrap font-mono text-sm font-bold sm:text-base" data-testid="retention-released">{money(summary.retentionReleased)}</dd>
         </div>
         <div>
-          <dt className="text-sm text-slate-600">Retention Outstanding</dt>
-          <dd className="font-bold text-pending-dark" data-testid="retention-outstanding">{money(summary.retentionOutstanding)}</dd>
+          <dt className="text-xs text-slate-600 sm:text-sm">Retention Outstanding</dt>
+          <dd className="whitespace-nowrap font-mono text-sm font-bold text-pending-dark sm:text-base" data-testid="retention-outstanding">{money(summary.retentionOutstanding)}</dd>
         </div>
       </dl>
       {canRelease ? (
