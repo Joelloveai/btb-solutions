@@ -1,10 +1,10 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
-import { Toaster } from "sonner";
-import { CompanyBar } from "@/components/layout/company-bar";
+import { Inter, JetBrains_Mono } from "next/font/google";
+import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
+const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono", display: "swap" });
 
 export const metadata: Metadata = {
   title: "BTB Solutions",
@@ -15,11 +15,10 @@ export const viewport: Viewport = { width: "device-width", initialScale: 1 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="en" className={`${inter.variable} ${mono.variable}`}>
       <body className="flex min-h-screen flex-col font-sans">
-        <CompanyBar />
         <div className="flex flex-1 flex-col">{children}</div>
-        <Toaster position="top-center" richColors />
+        <Toaster />
       </body>
     </html>
   );
