@@ -1,4 +1,3 @@
-import clsx from "clsx";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -8,7 +7,11 @@ import { formatDate, formatRM, todayInMalaysia } from "@/lib/format";
 import { getT } from "@/lib/locale";
 import { prisma } from "@/lib/prisma";
 import { summarizeProject } from "@/lib/project-summary";
-import { ageBucket, BUCKET_STYLES, daysOverdue } from "@/lib/receivables";
+import { ageBucket, daysOverdue } from "@/lib/receivables";
+import { ReceivablesTable } from "@/components/receivables/receivables-table";
+import { Card } from "@/components/ui/card";
+import { linkButton } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/page-header";
 
 export const dynamic = "force-dynamic";
 
@@ -38,15 +41,19 @@ export default async function ReceivablesPage() {
     .filter((r) => r.summary.retentionOutstanding > 0);
 
   const status = (r: (typeof open)[number]) => (r.paid > 0 ? "Partly paid" : r.days > 0 ? "Overdue" : "Unpaid");
-  const bucketClass = (days: number) => BUCKET_STYLES[ageBucket(days)];
+  const bucketTone = { current: "green", late: "yellow", overdue: "orange", critical: "red" } as const;
 
   return (
     <>
-      <h1 className="mb-1 text-2xl font-bold">{t.receivables}</h1>
-      <p className="mb-5 text-sm text-slate-600">
+      <PageHeader
+        title={t.receivables}
+        description={
+          <>
         Claims are due {PAYMENT_TERMS_DAYS} days after the claim date. Total waiting to be collected:{" "}
-        <span className="font-semibold text-slate-900" data-testid="total-owed">{money(totalOwed)}</span>
-      </p>
+        <span className="font-semibold text-foreground" data-testid="total-owed">{money(totalOwed)}</span>
+      </>
+        }
+      />
 
       {open.length === 0 ? (
         <EmptyState title="Nothing outstanding" hint="Every issued claim has been paid." />
@@ -54,26 +61,24 @@ export default async function ReceivablesPage() {
         <>
           <div className="space-y-2 md:hidden">
             {open.map((r) => (
-              <div key={r.claim.id} className="rounded-xl border border-slate-200 bg-white p-[0.6rem]">
+              <div key={r.claim.id} className="rounded-xl border bg-card p-3 shadow-sm">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="font-semibold">{r.claim.project.clientName ?? "No client"}</p>
-                    <p className="truncate text-sm text-slate-600">
+                    <p className="truncate text-sm text-muted-foreground">
                       {r.claim.project.name} · Claim {r.claim.number}
                     </p>
                   </div>
-                  <span className={clsx("shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold", bucketClass(r.days))}>
-                    {r.days} days
-                  </span>
+                  <Badge tone={bucketTone[ageBucket(r.days)]}>{`${r.days} days`}</Badge>
                 </div>
-                <p className="mt-1 text-lg font-bold tabular-nums">{money(r.balance)}</p>
-                <p className="text-sm text-slate-600">
+                <p className="mt-1 font-mono text-lg font-semibold tabular-nums">{money(r.balance)}</p>
+                <p className="text-sm text-muted-foreground">
                   {status(r)} · issued {formatDate(r.claim.date, locale)}
                 </p>
                 <Link
                   href={`/receivables/${r.claim.id}/reminder`}
                   target="_blank"
-                  className="mt-2 inline-flex h-9 items-center rounded-lg bg-accent px-3 text-sm font-semibold text-white"
+                  className={`mt-2 ${linkButton("accent", true)}`}
                 >
                   Generate Reminder
                 </Link>
@@ -81,71 +86,43 @@ export default async function ReceivablesPage() {
             ))}
           </div>
 
-          <div className="relative hidden overflow-x-auto rounded-xl border border-slate-200 bg-white md:block">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                <tr>
-                  <th className="px-3 py-2 font-semibold">Client</th>
-                  <th className="px-3 py-2 font-semibold">Project</th>
-                  <th className="px-3 py-2 font-semibold">Claim No.</th>
-                  <th className="px-3 py-2 text-right font-semibold">Amount</th>
-                  <th className="px-3 py-2 font-semibold">Date Issued</th>
-                  <th className="px-3 py-2 font-semibold">Days Overdue</th>
-                  <th className="px-3 py-2 font-semibold">Status</th>
-                  <th className="px-3 py-2"><span className="sr-only">Actions</span></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {open.map((r) => (
-                  <tr key={r.claim.id}>
-                    <td className="px-3 py-2 font-semibold">{r.claim.project.clientName ?? "—"}</td>
-                    <td className="px-3 py-2">
-                      <Link href={`/projects/${r.claim.projectId}`} className="text-brand hover:underline">
-                        {r.claim.project.name}
-                      </Link>
-                    </td>
-                    <td className="px-3 py-2">{r.claim.number}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{money(r.balance)}</td>
-                    <td className="px-3 py-2">{formatDate(r.claim.date, locale)}</td>
-                    <td className="px-3 py-2">
-                      <span data-testid="days-overdue" className={clsx("rounded-full px-2.5 py-0.5 text-xs font-semibold", bucketClass(r.days))}>
-                        {r.days}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2">{status(r)}</td>
-                    <td className="px-3 py-2 text-right">
-                      <Link
-                        href={`/receivables/${r.claim.id}/reminder`}
-                        target="_blank"
-                        className="inline-flex h-8 items-center rounded-lg bg-accent px-3 text-xs font-semibold text-white"
-                      >
-                        Generate Reminder
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="hidden md:block">
+            <ReceivablesTable
+              rows={open.map((r) => ({
+                claimId: r.claim.id,
+                projectId: r.claim.projectId,
+                client: r.claim.project.clientName ?? "—",
+                project: r.claim.project.name,
+                claimNumber: r.claim.number,
+                balance: money(r.balance),
+                balanceValue: r.balance,
+                issuedText: formatDate(r.claim.date, locale),
+                issuedSort: r.claim.date.getTime(),
+                days: r.days,
+                bucket: ageBucket(r.days),
+                status: status(r),
+              }))}
+            />
           </div>
         </>
       )}
 
       {retention.length > 0 ? (
         <section className="mt-8" aria-label="Retention outstanding">
-          <h2 className="mb-2 text-lg font-bold">Retention to collect</h2>
+          <h2 className="mb-2 text-base font-semibold">Retention to collect</h2>
           <div className="space-y-2">
             {retention.map(({ project, summary }) => (
               <Link
                 key={project.id}
                 href={`/projects/${project.id}`}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-3 hover:border-brand"
+                className="flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-card p-3 shadow-sm hover:border-primary/40"
               >
                 <div>
                   <p className="font-semibold">{project.name}</p>
-                  <p className="text-sm text-slate-600">{project.clientName ?? "No client"}</p>
+                  <p className="text-sm text-muted-foreground">{project.clientName ?? "No client"}</p>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="font-semibold tabular-nums">{money(summary.retentionOutstanding)}</span>
+                  <span className="font-mono font-semibold tabular-nums">{money(summary.retentionOutstanding)}</span>
                   <Badge tone={project.status === "COMPLETED" ? "yellow" : "gray"}>
                     {project.status === "COMPLETED" ? "Ready to release" : "Held until completion"}
                   </Badge>

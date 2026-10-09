@@ -2,6 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { QuoteActions } from "@/components/quotes/quote-actions";
 import { Badge } from "@/components/ui/badge";
+import { linkButton } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ChevronLeft } from "lucide-react";
 import { QUOTE_STATUS_LABELS, type QuoteStatus } from "@/lib/constants";
 import { formatDate, formatRM } from "@/lib/format";
 import { getLocale } from "@/lib/locale";
@@ -22,71 +27,65 @@ export default async function QuotePage({ params }: { params: { id: string } }) 
 
   return (
     <div className="mx-auto max-w-3xl">
-      <Link href="/quotes" className="text-sm font-medium text-brand">
-        ← Quotes
+      <Link href="/quotes" className="mb-2 inline-flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground">
+        <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+        Quotes
       </Link>
-      <header className="mb-4 mt-2">
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-bold">
-            {quoteNumber(quote.number)} · {quote.title}
-          </h1>
-          <Badge tone={tone[status] ?? "gray"}>{QUOTE_STATUS_LABELS[status] ?? quote.status}</Badge>
-        </div>
-        <p className="text-slate-600">
-          {quote.clientName} · {formatDate(quote.date, locale)}
-        </p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          {!quote.projectId ? (
-            <Link href={`/quotes/${quote.id}/edit`} className="inline-flex h-9 items-center rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold">
-              Edit Quote
-            </Link>
-          ) : null}
-          <Link
-            href={`/quotes/${quote.id}/print`}
-            target="_blank"
-            className="inline-flex h-9 items-center rounded-lg bg-accent px-3 text-sm font-semibold text-white"
-          >
-            Print / PDF
+      <PageHeader
+        title={`${quoteNumber(quote.number)} · ${quote.title}`}
+        description={
+          <>
+            {quote.clientName} · {formatDate(quote.date, locale)}
+          </>
+        }
+      >
+        <Badge tone={tone[status] ?? "gray"}>{QUOTE_STATUS_LABELS[status] ?? quote.status}</Badge>
+        {!quote.projectId ? (
+          <Link href={`/quotes/${quote.id}/edit`} className={linkButton("secondary", true)}>
+            Edit Quote
           </Link>
-        </div>
-      </header>
-
-      <div className="mb-4 overflow-x-auto rounded-xl border border-slate-200 bg-white">
-        <table className="w-full min-w-[520px] text-left text-sm">
-          <thead className="bg-slate-50 text-slate-600">
-            <tr>
-              <th className="px-3 py-2.5 font-semibold">Description</th>
-              <th className="px-3 py-2.5 text-right font-semibold">Qty</th>
-              <th className="px-3 py-2.5 font-semibold">Unit</th>
-              <th className="px-3 py-2.5 text-right font-semibold">Unit Price</th>
-              <th className="px-3 py-2.5 text-right font-semibold">Amount</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {quote.lines.map((l) => (
-              <tr key={l.id}>
-                <td className="px-3 py-2.5">{l.description}</td>
-                <td className="px-3 py-2.5 text-right tabular-nums">{l.qty.toString()}</td>
-                <td className="px-3 py-2.5">{l.unit}</td>
-                <td className="px-3 py-2.5 text-right tabular-nums">{money(l.unitPrice.toNumber())}</td>
-                <td className="px-3 py-2.5 text-right font-semibold tabular-nums">{money(l.amount.toNumber())}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="mb-5 ml-auto max-w-xs rounded-xl border border-slate-200 bg-white p-4">
-        <div className="flex justify-between py-1"><span>Subtotal</span><span data-testid="quote-subtotal">{money(totals.subtotal)}</span></div>
-        {quote.sstEnabled ? (
-          <div className="flex justify-between py-1"><span>SST ({Number(quote.sstRate)}%)</span><span>{money(totals.sst)}</span></div>
         ) : null}
-        <div className="flex justify-between border-t border-slate-200 pt-2 text-lg font-bold">
-          <span>Total</span><span data-testid="quote-total">{money(totals.total)}</span>
-        </div>
-      </div>
+        <Link href={`/quotes/${quote.id}/print`} target="_blank" className={linkButton("accent", true)}>
+          Print / PDF
+        </Link>
+      </PageHeader>
 
-      {quote.notes ? <p className="mb-5 whitespace-pre-line text-sm text-slate-600">{quote.notes}</p> : null}
+      <Card className="mb-4 overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead>Description</TableHead>
+              <TableHead className="text-right">Qty</TableHead>
+              <TableHead>Unit</TableHead>
+              <TableHead className="text-right">Unit Price</TableHead>
+              <TableHead className="text-right">Amount</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {quote.lines.map((l) => (
+              <TableRow key={l.id}>
+                <TableCell>{l.description}</TableCell>
+                <TableCell className="text-right font-mono text-[13px] tabular-nums">{l.qty.toString()}</TableCell>
+                <TableCell>{l.unit}</TableCell>
+                <TableCell className="whitespace-nowrap text-right font-mono text-[13px] tabular-nums">{money(l.unitPrice.toNumber())}</TableCell>
+                <TableCell className="whitespace-nowrap text-right font-mono text-[13px] font-semibold tabular-nums">{money(l.amount.toNumber())}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Card>
+
+      <Card className="mb-5 ml-auto max-w-xs p-4 font-mono text-sm tabular-nums">
+        <div className="flex justify-between py-1"><span className="font-sans">Subtotal</span><span data-testid="quote-subtotal">{money(totals.subtotal)}</span></div>
+        {quote.sstEnabled ? (
+          <div className="flex justify-between py-1"><span className="font-sans">SST ({Number(quote.sstRate)}%)</span><span>{money(totals.sst)}</span></div>
+        ) : null}
+        <div className="mt-1 flex justify-between border-t pt-2 text-base font-semibold">
+          <span className="font-sans">Total</span><span data-testid="quote-total">{money(totals.total)}</span>
+        </div>
+      </Card>
+
+      {quote.notes ? <p className="mb-5 whitespace-pre-line text-sm text-muted-foreground">{quote.notes}</p> : null}
 
       <QuoteActions id={quote.id} status={status} projectId={quote.projectId} />
     </div>

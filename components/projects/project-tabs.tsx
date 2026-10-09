@@ -1,8 +1,7 @@
 "use client";
 
-import clsx from "clsx";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
 import { toast } from "sonner";
 import {
   deleteBoqLine,
@@ -22,6 +21,7 @@ import { AddChangeOrderForm } from "@/components/forms/add-change-order-form";
 import { AddCostForm } from "@/components/forms/add-cost-form";
 import { AddPaymentForm } from "@/components/forms/add-payment-form";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
@@ -84,7 +84,6 @@ const TABS = [
   { id: "changes", label: "changeOrders" },
   { id: "boq", label: "BOQ" },
 ] as const;
-type TabId = (typeof TABS)[number]["id"];
 
 const tone = { PENDING: "yellow", APPROVED: "green", REJECTED: "red" } as const;
 
@@ -106,35 +105,30 @@ export function ProjectTabs({
   unallocatedActual: number;
   lookups: Lookups;
 }) {
-  const [tab, setTab] = useState<TabId>("costs");
   const t = useT();
 
   return (
-    <section>
-      <div role="tablist" className="mb-4 grid grid-cols-4 gap-1 rounded-xl bg-gray-200 p-1">
+    <Tabs defaultValue="costs" className="w-full">
+      <TabsList>
         {TABS.map((item) => (
-          <button
-            key={item.id}
-            role="tab"
-            aria-selected={tab === item.id}
-            onClick={() => setTab(item.id)}
-            className={clsx(
-              "h-11 whitespace-nowrap rounded-lg px-1 text-[13px] font-semibold sm:text-sm",
-              tab === item.id ? "bg-white text-brand shadow" : "text-gray-600",
-            )}
-          >
+          <TabsTrigger key={item.id} value={item.id}>
             {item.label === "BOQ" ? "BOQ" : t[item.label]}
-          </button>
+          </TabsTrigger>
         ))}
-      </div>
-
-      <div role="tabpanel">
-        {tab === "costs" ? <CostsPanel projectId={projectId} rows={costs} lookups={lookups} /> : null}
-        {tab === "payments" ? <PaymentsPanel projectId={projectId} rows={payments} lookups={lookups} /> : null}
-        {tab === "changes" ? <ChangeOrdersPanel projectId={projectId} rows={changeOrders} lookups={lookups} /> : null}
-        {tab === "boq" ? <BoqPanel projectId={projectId} rows={boq} unallocatedActual={unallocatedActual} /> : null}
-      </div>
-    </section>
+      </TabsList>
+      <TabsContent value="costs">
+        <CostsPanel projectId={projectId} rows={costs} lookups={lookups} />
+      </TabsContent>
+      <TabsContent value="payments">
+        <PaymentsPanel projectId={projectId} rows={payments} lookups={lookups} />
+      </TabsContent>
+      <TabsContent value="changes">
+        <ChangeOrdersPanel projectId={projectId} rows={changeOrders} lookups={lookups} />
+      </TabsContent>
+      <TabsContent value="boq">
+        <BoqPanel projectId={projectId} rows={boq} unallocatedActual={unallocatedActual} />
+      </TabsContent>
+    </Tabs>
   );
 }
 
@@ -148,7 +142,7 @@ function useFormatters() {
 
 function TableShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="relative rounded-xl border border-gray-200 bg-white md:overflow-x-auto">
+    <div className="relative rounded-xl border border-border bg-card shadow-sm md:overflow-x-auto">
       <table className="block w-full text-left text-sm md:table md:min-w-[600px]">{children}</table>
     </div>
   );
@@ -156,18 +150,18 @@ function TableShell({ children }: { children: React.ReactNode }) {
 
 const dateValue = (iso: string) => iso.slice(0, 10);
 const actionsTh = <th className="w-28 px-3 py-2.5"><span className="sr-only">Actions</span></th>;
-const th = "px-3 py-2.5 font-semibold text-gray-600";
+const th = "h-9 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground";
 const td = "px-3 py-3 align-top";
 // Below the md breakpoint each row is a card: a two-column grid with the amount always visible
 // on the first line. From md up the same markup is an ordinary table row.
-const tbodyCls = "block divide-y divide-gray-100 md:table-row-group";
-const theadCls = "hidden bg-gray-50 md:table-header-group";
+const tbodyCls = "block divide-y divide-border md:table-row-group";
+const theadCls = "hidden bg-muted/60 md:table-header-group";
 const rowCls = "grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 p-3 md:table-row md:p-0";
 const cell = "p-0 align-top md:table-cell md:px-3 md:py-3 md:col-auto md:row-auto";
 const mAmount = `${cell} col-start-2 row-start-1 text-right font-mono font-semibold tabular-nums`;
 const mMain = `${cell} col-start-1 row-start-1 font-medium md:font-normal`;
-const mSub = `${cell} col-start-1 row-start-2 text-xs text-gray-500 md:text-sm md:text-gray-900`;
-const mSubRight = `${cell} col-start-2 row-start-2 text-right text-xs text-gray-500 md:text-sm md:text-gray-900`;
+const mSub = `${cell} col-start-1 row-start-2 text-xs text-muted-foreground md:text-sm md:text-foreground`;
+const mSubRight = `${cell} col-start-2 row-start-2 text-right text-xs text-muted-foreground md:text-left md:text-sm md:text-foreground`;
 const mActions = `${cell} col-span-2 row-start-3`;
 
 function CostsPanel({ projectId, rows, lookups }: { projectId: string; rows: CostRow[]; lookups: Lookups }) {
@@ -201,9 +195,9 @@ function CostsPanel({ projectId, rows, lookups }: { projectId: string; rows: Cos
                 <td className={mSubRight}>{CATEGORY_LABELS[row.category as CostCategory] ?? row.category}</td>
                 <td className={mMain}>
                   {row.description}
-                  {row.vendor ? <span className="block text-xs text-gray-500">{row.vendor}</span> : null}
-                  {row.subconName ? <span className="block text-xs text-gray-500">Subcon: {row.subconName}</span> : null}
-                  {row.boqLabel ? <span className="block text-xs text-gray-500">BOQ: {row.boqLabel}</span> : null}
+                  {row.vendor ? <span className="block text-xs text-muted-foreground">{row.vendor}</span> : null}
+                  {row.subconName ? <span className="block text-xs text-muted-foreground">Subcon: {row.subconName}</span> : null}
+                  {row.boqLabel ? <span className="block text-xs text-muted-foreground">BOQ: {row.boqLabel}</span> : null}
                   {row.category === "SUBCON" ? (
                     <div className="mt-1">
                       <MarkPaidButton costId={row.id} paidAt={row.paidAt} />
@@ -274,7 +268,7 @@ function PaymentsPanel({ projectId, rows, lookups }: { projectId: string; rows: 
                 <td className={mAmount}>{formatRM(row.amount)}</td>
                 <td className={mSub}>
                   {row.reference ?? "—"}
-                  {row.claimNumber ? <span className="block text-xs text-gray-500">Claim {row.claimNumber}</span> : null}
+                  {row.claimNumber ? <span className="block text-xs text-muted-foreground">Claim {row.claimNumber}</span> : null}
                 </td>
                 <td className={mActions}>
                   <div className="flex justify-end">
@@ -352,7 +346,7 @@ function ChangeOrdersPanel({ projectId, rows, lookups }: { projectId: string; ro
                   <td className={mSub}>{formatDate(row.date)}</td>
                   <td className={mMain}>
                     {row.description}
-                    {row.boqLabel ? <span className="block text-xs text-gray-500">BOQ: {row.boqLabel}</span> : null}
+                    {row.boqLabel ? <span className="block text-xs text-muted-foreground">BOQ: {row.boqLabel}</span> : null}
                   </td>
                   <td className={mAmount}>{formatRM(row.amount)}</td>
                   <td className={mSubRight}>
@@ -427,12 +421,12 @@ function BoqPanel({ projectId, rows, unallocatedActual }: { projectId: string; r
             {rows.map((row) => (
               <tr key={row.id} className="grid grid-cols-3 gap-x-3 gap-y-1 p-3 md:table-row md:p-0">
                 <td className={`${cell} col-span-3 font-medium md:font-normal`}>{row.description}</td>
-                <td className={`${cell} col-span-3 text-right text-xs text-gray-600 md:text-sm`}>
+                <td className={`${cell} col-span-3 text-right text-xs text-muted-foreground md:text-sm`}>
                   {row.qty} {row.unit} × {formatRM(row.rate)}
                 </td>
-                <td data-label="Budget" className={`${cell} text-right font-mono tabular-nums before:block before:text-[11px] before:font-sans before:font-normal before:text-gray-500 before:content-[attr(data-label)] md:before:hidden`}>{formatRM(row.budget)}</td>
-                <td data-label="Actual" className={`${cell} text-right font-mono tabular-nums before:block before:text-[11px] before:font-sans before:font-normal before:text-gray-500 before:content-[attr(data-label)] md:before:hidden`}>{formatRM(row.actual)}</td>
-                <td data-label="Remaining" className={`${cell} text-right font-mono font-semibold tabular-nums before:block before:text-[11px] before:font-sans before:font-normal before:text-gray-500 before:content-[attr(data-label)] md:before:hidden ${row.remaining < 0 ? "text-loss" : "text-profit"}`}>
+                <td data-label="Budget" className={`${cell} text-right font-mono tabular-nums before:block before:text-[11px] before:font-sans before:font-normal before:text-muted-foreground before:content-[attr(data-label)] md:before:hidden`}>{formatRM(row.budget)}</td>
+                <td data-label="Actual" className={`${cell} text-right font-mono tabular-nums before:block before:text-[11px] before:font-sans before:font-normal before:text-muted-foreground before:content-[attr(data-label)] md:before:hidden`}>{formatRM(row.actual)}</td>
+                <td data-label="Remaining" className={`${cell} text-right font-mono font-semibold tabular-nums before:block before:text-[11px] before:font-sans before:font-normal before:text-muted-foreground before:content-[attr(data-label)] md:before:hidden ${row.remaining < 0 ? "text-loss" : "text-profit"}`}>
                   {formatRM(row.remaining)}
                 </td>
                 <td className={`${cell} col-span-3`}>
@@ -452,8 +446,8 @@ function BoqPanel({ projectId, rows, unallocatedActual }: { projectId: string; r
               </tr>
             ))}
             {unallocatedActual !== 0 ? (
-              <tr className="grid grid-cols-[1fr_auto] gap-x-3 bg-gray-50 p-3 md:table-row md:p-0">
-                <td className={`${cell} text-gray-600`} colSpan={3}>
+              <tr className="grid grid-cols-[1fr_auto] gap-x-3 bg-muted/60 p-3 md:table-row md:p-0">
+                <td className={`${cell} text-muted-foreground`} colSpan={3}>
                   Costs not linked to a BOQ line
                 </td>
                 <td className={`${cell} text-right font-mono tabular-nums`}>{formatRM(unallocatedActual)}</td>

@@ -1,4 +1,6 @@
+import { ClientsTable } from "@/components/clients/clients-table";
 import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/ui/page-header";
 import { claimBalance } from "@/lib/claims";
 import { formatDate, formatRM } from "@/lib/format";
 import { getT } from "@/lib/locale";
@@ -47,47 +49,37 @@ export default async function ClientsPage() {
 
   return (
     <>
-      <h1 className="mb-5 text-2xl font-bold">{t.clients}</h1>
+      <PageHeader title={t.clients} />
       {rows.length === 0 ? (
         <EmptyState title="No clients yet" hint="Create a client from the New Project form." />
       ) : (
         <>
           <div className="space-y-2 md:hidden">
             {rows.map((r) => (
-              <div key={r.key} className="rounded-xl border border-slate-200 bg-white p-[0.6rem]">
+              <div key={r.key} className="rounded-xl border bg-card p-3 shadow-sm">
                 <p className="font-semibold">{r.name}</p>
                 <dl className="mt-2 grid grid-cols-2 gap-2 text-sm">
-                  <div><dt className="text-slate-500">Projects</dt><dd className="font-semibold">{r.projects}</dd></div>
-                  <div><dt className="text-slate-500">Total revenue</dt><dd className="font-semibold">{money(r.revenue)}</dd></div>
-                  <div><dt className="text-slate-500">Avg days to pay</dt><dd className="font-semibold">{r.avgDays ?? "—"}</dd></div>
-                  <div><dt className="text-slate-500">Last project</dt><dd className="font-semibold">{r.lastProject ? formatDate(r.lastProject, locale) : "—"}</dd></div>
+                  <div><dt className="text-muted-foreground">Projects</dt><dd className="font-semibold">{r.projects}</dd></div>
+                  <div><dt className="text-muted-foreground">Total revenue</dt><dd className="font-mono text-[13px] font-medium tabular-nums">{money(r.revenue)}</dd></div>
+                  <div><dt className="text-muted-foreground">Avg days to pay</dt><dd className="font-semibold">{r.avgDays ?? "—"}</dd></div>
+                  <div><dt className="text-muted-foreground">Last project</dt><dd className="font-semibold">{r.lastProject ? formatDate(r.lastProject, locale) : "—"}</dd></div>
                 </dl>
               </div>
             ))}
           </div>
-          <div className="relative hidden overflow-x-auto rounded-xl border border-slate-200 bg-white md:block">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                <tr>
-                  <th className="px-3 py-2 font-semibold">Client</th>
-                  <th className="px-3 py-2 text-right font-semibold">Projects</th>
-                  <th className="px-3 py-2 text-right font-semibold">Total Revenue</th>
-                  <th className="px-3 py-2 text-right font-semibold">Avg Days to Pay</th>
-                  <th className="px-3 py-2 font-semibold">Last Project</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {rows.map((r) => (
-                  <tr key={r.key}>
-                    <td className="px-3 py-2 font-semibold">{r.name}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{r.projects}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{money(r.revenue)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{r.avgDays ?? "—"}</td>
-                    <td className="px-3 py-2">{r.lastProject ? formatDate(r.lastProject, locale) : "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="hidden md:block">
+            <ClientsTable
+              rows={rows.map((r) => ({
+                key: r.key,
+                name: r.name,
+                projects: r.projects,
+                revenue: money(r.revenue),
+                revenueValue: r.revenue,
+                avgDays: r.avgDays,
+                lastText: r.lastProject ? formatDate(r.lastProject, locale) : "—",
+                lastSort: r.lastProject ? r.lastProject.getTime() : 0,
+              }))}
+            />
           </div>
         </>
       )}

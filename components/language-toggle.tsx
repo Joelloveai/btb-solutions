@@ -29,8 +29,8 @@ export function LanguageToggle({ current }: { current: Locale }) {
 
   return (
     <div>
-      <p className="mb-1 text-sm text-slate-500">{t.language}</p>
-      <div role="group" aria-label={t.language} className="grid max-w-xs grid-cols-2 gap-1 rounded-xl bg-slate-200 p-1">
+      <p className="mb-1 text-sm text-muted-foreground">{t.language}</p>
+      <div role="group" aria-label={t.language} className="grid max-w-xs grid-cols-2 gap-1 rounded-lg bg-muted p-1">
         {OPTIONS.map((o) => (
           <button
             key={o.value}
@@ -39,8 +39,8 @@ export function LanguageToggle({ current }: { current: Locale }) {
             disabled={pending}
             onClick={() => choose(o.value)}
             className={clsx(
-              "h-11 rounded-lg text-sm font-semibold",
-              current === o.value ? "bg-white text-brand shadow" : "text-slate-600",
+              "h-10 rounded-md text-sm font-medium",
+              current === o.value ? "bg-background font-semibold text-foreground shadow-sm" : "text-muted-foreground",
             )}
           >
             {o.label}

@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { DeleteClaimButton } from "@/components/claims/claim-row-actions";
+import { ClaimsTable } from "@/components/claims/claims-table";
 import { IssueClaimButton } from "@/components/claims/issue-claim-form";
 import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/ui/page-header";
+import { ChevronLeft } from "lucide-react";
 import { claimBalance } from "@/lib/claims";
 import { formatDate, formatRM } from "@/lib/format";
 import { getLocale } from "@/lib/locale";
@@ -28,11 +30,19 @@ export default async function ClaimsPage({ params }: { params: { id: string } })
 
   return (
     <>
-      <Link href={`/projects/${project.id}`} className="text-sm font-medium text-brand">
-        ← {project.name}
+      <Link href={`/projects/${project.id}`} className="mb-2 inline-flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground">
+        <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+        {project.name}
       </Link>
-      <div className="mb-4 mt-2 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">Progress Claims</h1>
+      <PageHeader
+        title="Progress Claims"
+        description={
+          <>
+            Worked on so far: {money(claimedWork.toNumber())} of {money(project.contractValue.plus(approved).toNumber())} · Retention{" "}
+            {project.retentionPercent.toNumber()}%
+          </>
+        }
+      >
         <IssueClaimButton
           projectId={project.id}
           retentionPercent={project.retentionPercent.toNumber()}
@@ -41,61 +51,31 @@ export default async function ClaimsPage({ params }: { params: { id: string } })
           previousClaimed={previousClaimed}
           claimableLeft={Math.max(0, claimableLeft)}
         />
-      </div>
-      <p className="mb-4 text-sm text-slate-600">
-        Worked on so far: {money(claimedWork.toNumber())} of {money(project.contractValue.plus(approved).toNumber())} · Retention{" "}
-        {project.retentionPercent.toNumber()}%
-      </p>
+      </PageHeader>
 
       {project.claims.length === 0 ? (
         <EmptyState title="No claims yet" hint="Issue your first progress claim when work is ready to be billed." />
       ) : (
-        <div className="relative overflow-x-auto rounded-xl border border-slate-200 bg-white">
-          <table className="w-full min-w-[640px] text-left text-sm">
-            <thead className="bg-slate-50 text-slate-600">
-              <tr>
-                <th className="px-3 py-2.5 font-semibold">Claim</th>
-                <th className="px-3 py-2.5 font-semibold">Date</th>
-                <th className="px-3 py-2.5 text-right font-semibold">Work Done</th>
-                <th className="px-3 py-2.5 text-right font-semibold">Retention</th>
-                <th className="px-3 py-2.5 text-right font-semibold">Net Claim</th>
-                <th className="px-3 py-2.5 text-right font-semibold">Balance</th>
-                <th className="w-32 px-3 py-2.5"><span className="sr-only">Actions</span></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {project.claims.map((c) => {
-                const { balance } = claimBalance(c.netClaim, c.payments);
-                return (
-                  <tr key={c.id}>
-                    <td className="px-3 py-3 font-semibold">No. {c.number}</td>
-                    <td className="px-3 py-3">{formatDate(c.date, locale)}</td>
-                    <td className="px-3 py-3 text-right tabular-nums">{money(c.workDone.toNumber())}</td>
-                    <td className="px-3 py-3 text-right tabular-nums">{money(c.retentionAmount.toNumber())}</td>
-                    <td className="px-3 py-3 text-right font-semibold tabular-nums">{money(c.netClaim.toNumber())}</td>
-                    <td className={`px-3 py-3 text-right tabular-nums ${balance > 0 ? "text-pending-dark" : "text-profit-dark"}`}>
-                      {balance > 0 ? money(balance) : "Paid"}
-                    </td>
-                    <td className="px-3 py-3">
-                      <div className="flex items-center justify-end gap-1">
-                        <Link
-                          href={`/projects/${project.id}/claims/${c.id}`}
-                          target="_blank"
-                          className="rounded-lg px-2 py-2 text-sm font-semibold text-brand hover:bg-slate-100"
-                        >
-                          Print
-                        </Link>
-                        {c.number === project.lastClaimNumber && c.payments.length === 0 ? (
-                          <DeleteClaimButton id={c.id} number={c.number} />
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <ClaimsTable
+          rows={project.claims.map((c) => {
+            const { balance, paid } = claimBalance(c.netClaim, c.payments);
+            return {
+              id: c.id,
+              projectId: project.id,
+              number: c.number,
+              dateText: formatDate(c.date, locale),
+              dateSort: c.date.getTime(),
+              workDone: money(c.workDone.toNumber()),
+              retention: money(c.retentionAmount.toNumber()),
+              netClaim: money(c.netClaim.toNumber()),
+              netClaimValue: c.netClaim.toNumber(),
+              balance: money(balance),
+              balanceValue: balance,
+              paidAny: paid > 0,
+              canDelete: c.number === project.lastClaimNumber && c.payments.length === 0,
+            };
+          })}
+        />
       )}
     </>
   );

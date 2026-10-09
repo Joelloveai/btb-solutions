@@ -28,7 +28,7 @@ export default async function ReminderPage({ params }: { params: { claimId: stri
       <div className="mb-4 flex justify-end print:hidden">
         <PrintButton />
       </div>
-      <article className="rounded-xl border border-slate-200 bg-white p-6 text-sm leading-relaxed print:rounded-none print:border-0 print:p-0">
+      <article className="rounded-xl border border-border bg-card p-6 text-sm leading-relaxed print:rounded-none print:border-0 print:p-0">
         <Letterhead />
         <p className="mt-4">{formatDate(today, locale)}</p>
         <p className="mt-4 font-semibold">{claim.project.clientName ?? "The Accounts Department"}</p>
@@ -41,7 +41,7 @@ export default async function ReminderPage({ params }: { params: { claimId: stri
           that Progress Claim No. {claim.number}, issued on {formatDate(claim.date, locale)}, still has a balance
           outstanding.
         </p>
-        <dl className="my-4 divide-y divide-slate-200 border-y border-slate-200">
+        <dl className="my-4 divide-y divide-border border-y border-border">
           <Row label="Net claim" value={money(claim.netClaim.toNumber())} />
           {paid > 0 ? <Row label="Received so far" value={money(paid)} /> : null}
           <Row label="Balance outstanding" value={money(balance)} strong />
@@ -65,7 +65,7 @@ export default async function ReminderPage({ params }: { params: { claimId: stri
 function Row({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
     <div className={`flex justify-between py-2 ${strong ? "font-bold" : ""}`}>
-      <dt className={strong ? "" : "text-slate-600"}>{label}</dt>
+      <dt className={strong ? "" : "text-muted-foreground"}>{label}</dt>
       <dd>{value}</dd>
     </div>
   );

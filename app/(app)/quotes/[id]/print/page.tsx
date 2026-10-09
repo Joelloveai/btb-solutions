@@ -24,17 +24,17 @@ export default async function QuotePrintPage({ params }: { params: { id: string 
       <div className="mb-4 flex justify-end print:hidden">
         <PrintButton />
       </div>
-      <article className="rounded-xl border border-slate-200 bg-white p-6 print:rounded-none print:border-0 print:p-0">
+      <article className="rounded-xl border border-border bg-card p-6 print:rounded-none print:border-0 print:p-0">
         <Letterhead />
         <h2 className="my-4 text-lg font-bold uppercase tracking-wide">Quotation {quoteNumber(quote.number)}</h2>
         <dl className="mb-4 grid grid-cols-2 gap-y-1 text-sm">
-          <dt className="text-slate-600">To</dt><dd className="font-semibold">{quote.clientName}</dd>
-          <dt className="text-slate-600">Project</dt><dd className="font-semibold">{quote.title}</dd>
-          <dt className="text-slate-600">Date</dt><dd className="font-semibold">{formatDate(quote.date, locale)}</dd>
-          <dt className="text-slate-600">Valid for</dt><dd className="font-semibold">{QUOTE_VALID_DAYS} days</dd>
+          <dt className="text-muted-foreground">To</dt><dd className="font-semibold">{quote.clientName}</dd>
+          <dt className="text-muted-foreground">Project</dt><dd className="font-semibold">{quote.title}</dd>
+          <dt className="text-muted-foreground">Date</dt><dd className="font-semibold">{formatDate(quote.date, locale)}</dd>
+          <dt className="text-muted-foreground">Valid for</dt><dd className="font-semibold">{QUOTE_VALID_DAYS} days</dd>
         </dl>
         <table className="w-full text-left text-sm">
-          <thead className="border-y border-slate-300">
+          <thead className="border-y border-border">
             <tr>
               <th className="py-2">No.</th>
               <th className="py-2">Description</th>
@@ -44,7 +44,7 @@ export default async function QuotePrintPage({ params }: { params: { id: string 
               <th className="py-2 text-right">Amount</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-border">
             {quote.lines.map((l, i) => (
               <tr key={l.id}>
                 <td className="py-2">{i + 1}</td>
@@ -62,11 +62,11 @@ export default async function QuotePrintPage({ params }: { params: { id: string 
           {quote.sstEnabled ? (
             <div className="flex justify-between py-1"><span>SST ({Number(quote.sstRate)}%)</span><span>{money(totals.sst)}</span></div>
           ) : null}
-          <div className="flex justify-between border-t border-slate-300 pt-2 text-base font-bold">
+          <div className="flex justify-between border-t border-border pt-2 text-base font-bold">
             <span>Total</span><span>{money(totals.total)}</span>
           </div>
         </div>
-        <section className="mt-6 text-sm text-slate-700">
+        <section className="mt-6 text-sm text-muted-foreground">
           <h3 className="mb-1 font-semibold">Terms</h3>
           <ul className="list-disc pl-5">
             {[...(quote.notes ? [quote.notes] : []), ...QUOTE_TERMS].map((t) => (

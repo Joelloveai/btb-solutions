@@ -62,7 +62,7 @@ export function ClientPicker({ value, onChange }: { value: string; onChange: (id
         </Select>
       </Field>
       {creating ? (
-        <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <div className="space-y-3 rounded-lg border border-border bg-muted p-3">
           <Field label="New client name">
             <Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
           </Field>

@@ -47,8 +47,8 @@ export function ProjectFields({
           </Select>
         </Field>
       ) : null}
-      <label className="flex min-h-12 items-center gap-3 text-base text-slate-800">
-        <input type="checkbox" {...register("sstEnabled")} className="h-5 w-5 rounded border-slate-300 accent-brand" />
+      <label className="flex min-h-12 items-center gap-3 text-base text-foreground">
+        <input type="checkbox" {...register("sstEnabled")} className="h-5 w-5 rounded border-border accent-brand" />
         Apply SST (6%)
       </label>
     </>

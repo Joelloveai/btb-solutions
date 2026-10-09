@@ -13,7 +13,7 @@ export default async function EditQuotePage({ params }: { params: { id: string }
   if (quote.projectId) redirect(`/quotes/${quote.id}`);
   return (
     <div className="mx-auto max-w-2xl">
-      <Link href={`/quotes/${quote.id}`} className="text-sm font-medium text-brand">
+      <Link href={`/quotes/${quote.id}`} className="text-sm font-medium text-foreground">
         ← {quoteNumber(quote.number)}
       </Link>
       <h1 className="mb-4 mt-2 text-2xl font-bold">Edit Quote</h1>

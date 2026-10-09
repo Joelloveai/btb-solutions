@@ -8,7 +8,7 @@ import { Modal } from "@/components/ui/modal";
 import { useSubmit } from "./use-submit";
 
 const iconButton =
-  "flex h-11 w-11 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100";
+  "flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 export function EditIconButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
@@ -37,7 +37,7 @@ export function DeleteIconButton({
 
   return (
     <>
-      <button type="button" aria-label={label} onClick={() => setOpen(true)} className={`${iconButton} text-red-600 hover:bg-red-50`}>
+      <button type="button" aria-label={label} onClick={() => setOpen(true)} className={`${iconButton} text-loss hover:bg-loss-light hover:text-loss`}>
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M3 6h18" />
           <path d="M8 6V4h8v2" />
@@ -45,7 +45,7 @@ export function DeleteIconButton({
         </svg>
       </button>
       <Modal open={open} onClose={close} title="Confirm delete">
-        <p className="mb-5 text-base text-gray-800">{message}</p>
+        <p className="mb-5 text-base text-foreground">{message}</p>
         <div className="grid grid-cols-2 gap-3">
           <Button variant="secondary" onClick={close} disabled={pending}>
             {t.cancel}

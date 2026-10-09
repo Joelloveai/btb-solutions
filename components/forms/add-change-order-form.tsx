@@ -57,7 +57,7 @@ function Form({
           </Select>
         </Field>
       ) : null}
-      <p className="text-sm text-gray-600">Status starts as Pending. Approve it from the list.</p>
+      <p className="text-sm text-muted-foreground">Status starts as Pending. Approve it from the list.</p>
       <Button type="submit" className="w-full" disabled={pending}>
         {pending ? "Saving…" : "Save change order"}
       </Button>

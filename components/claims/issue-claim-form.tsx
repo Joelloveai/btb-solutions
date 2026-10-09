@@ -59,8 +59,8 @@ function Form({
       <Field label="Work done this period (RM)" error={errors.workDone?.message}>
         <Input {...register("workDone")} type="number" step="0.01" inputMode="decimal" />
       </Field>
-      <p className="text-sm text-slate-600">Still claimable on this contract: {money(claimableLeft)}</p>
-      <dl className="space-y-1 rounded-lg bg-slate-50 p-3 text-sm">
+      <p className="text-sm text-muted-foreground">Still claimable on this contract: {money(claimableLeft)}</p>
+      <dl className="space-y-1 rounded-lg bg-muted p-3 text-sm">
         {sstEnabled ? <Line label={`SST (${sstRate}%)`} value={money(figures.sstAmount)} /> : null}
         <Line label="Amount claimed" value={money(figures.amountClaimed)} />
         <Line label={`Retention held (${retentionPercent}%)`} value={`-${money(figures.retentionAmount)}`} />
@@ -75,7 +75,7 @@ function Form({
 
 function Line({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
-    <div className={`flex justify-between ${strong ? "border-t border-slate-200 pt-1 font-bold" : ""}`}>
+    <div className={`flex justify-between ${strong ? "border-t border-border pt-1 font-bold" : ""}`}>
       <dt>{label}</dt>
       <dd>{value}</dd>
     </div>

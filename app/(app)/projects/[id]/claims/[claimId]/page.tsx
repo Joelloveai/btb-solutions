@@ -36,19 +36,19 @@ export default async function ClaimPrintPage({ params }: { params: { id: string;
       <div className="mb-4 flex justify-end print:hidden">
         <PrintButton />
       </div>
-      <article className="rounded-xl border border-slate-200 bg-white p-6 print:rounded-none print:border-0 print:p-0">
+      <article className="rounded-xl border border-border bg-card p-6 print:rounded-none print:border-0 print:p-0">
         <Letterhead />
         <h2 className="my-4 text-lg font-bold uppercase tracking-wide">Progress Claim No. {claim.number}</h2>
         <dl className="mb-4 grid grid-cols-2 gap-y-1 text-sm">
-          <dt className="text-slate-600">Project</dt><dd className="font-semibold">{project.name}</dd>
-          <dt className="text-slate-600">Client</dt><dd className="font-semibold">{project.clientName ?? "—"}</dd>
-          <dt className="text-slate-600">Claim No.</dt><dd className="font-semibold">{claim.number}</dd>
-          <dt className="text-slate-600">Claim Date</dt><dd className="font-semibold">{formatDate(claim.date, locale)}</dd>
+          <dt className="text-muted-foreground">Project</dt><dd className="font-semibold">{project.name}</dd>
+          <dt className="text-muted-foreground">Client</dt><dd className="font-semibold">{project.clientName ?? "—"}</dd>
+          <dt className="text-muted-foreground">Claim No.</dt><dd className="font-semibold">{claim.number}</dd>
+          <dt className="text-muted-foreground">Claim Date</dt><dd className="font-semibold">{formatDate(claim.date, locale)}</dd>
         </dl>
-        <dl className="divide-y divide-slate-200 border-y border-slate-200 text-sm">
+        <dl className="divide-y divide-border border-y border-border text-sm">
           {rows.map(([label, value, strong]) => (
             <div key={label} className={`flex justify-between gap-4 py-2.5 ${strong ? "font-bold" : ""}`}>
-              <dt className={strong ? "" : "text-slate-600"}>{label}</dt>
+              <dt className={strong ? "" : "text-muted-foreground"}>{label}</dt>
               <dd className="text-right font-semibold">{value}</dd>
             </div>
           ))}

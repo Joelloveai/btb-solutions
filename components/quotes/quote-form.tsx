@@ -8,7 +8,8 @@ import { toast } from "sonner";
 import { createQuote, updateQuote } from "@/app/actions";
 import { useLocale } from "@/components/locale-provider";
 import { Button } from "@/components/ui/button";
-import { Field, Input, Select } from "@/components/ui/field";
+import { Card } from "@/components/ui/card";
+import { Field, Input, Select, Textarea } from "@/components/ui/field";
 import { QUOTE_STATUSES, QUOTE_STATUS_LABELS } from "@/lib/constants";
 import { formatRM, todayInputValue } from "@/lib/format";
 import { calculateQuote } from "@/lib/quotes";
@@ -64,7 +65,7 @@ export function QuoteForm({ quoteId, values }: { quoteId?: string; values?: Quot
 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
-      <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 md:grid-cols-2">
+      <Card className="grid gap-3 p-4 md:grid-cols-2">
         <Field label="Client name" error={errors.clientName?.message}>
           <Input {...register("clientName")} />
         </Field>
@@ -83,18 +84,18 @@ export function QuoteForm({ quoteId, values }: { quoteId?: string; values?: Quot
             ))}
           </Select>
         </Field>
-        <label className="flex min-h-12 items-center gap-3 text-base text-slate-800">
-          <input type="checkbox" {...register("sstEnabled")} className="h-5 w-5 rounded border-slate-300 accent-brand" />
+        <label className="flex min-h-12 items-center gap-3 text-base text-foreground">
+          <input type="checkbox" {...register("sstEnabled")} className="h-5 w-5 rounded border-border accent-brand" />
           Apply SST (6%)
         </label>
-      </div>
+      </Card>
 
       <div className="space-y-3">
         {fields.map((field, index) => {
           const amount = totals.lineAmounts[index] ?? 0;
           const lineErrors = errors.lines?.[index];
           return (
-            <div key={field.id} className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+            <Card key={field.id} className="space-y-3 p-4">
               <Field label="Description" error={lineErrors?.description?.message}>
                 <Input {...register(`lines.${index}.description`)} placeholder="e.g. Supply and lay floor tiles" />
               </Field>
@@ -110,8 +111,8 @@ export function QuoteForm({ quoteId, values }: { quoteId?: string; values?: Quot
                 </Field>
               </div>
               <div className="flex items-center justify-between">
-                <p className="text-sm text-slate-600">
-                  Amount <span className="font-semibold text-slate-900">{money(amount)}</span>
+                <p className="text-sm text-muted-foreground">
+                  Amount <span className="font-mono font-semibold tabular-nums text-foreground">{money(amount)}</span>
                 </p>
                 {fields.length > 1 ? (
                   <Button type="button" variant="ghost" small onClick={() => remove(index)}>
@@ -119,7 +120,7 @@ export function QuoteForm({ quoteId, values }: { quoteId?: string; values?: Quot
                   </Button>
                 ) : null}
               </div>
-            </div>
+            </Card>
           );
         })}
         {errors.lines?.message ? <p className="text-sm text-loss">{errors.lines.message}</p> : null}
@@ -129,18 +130,14 @@ export function QuoteForm({ quoteId, values }: { quoteId?: string; values?: Quot
       </div>
 
       <Field label="Notes / terms (optional)" error={errors.notes?.message}>
-        <textarea
-          {...register("notes")}
-          rows={3}
-          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-base focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30"
-        />
+        <Textarea {...register("notes")} rows={3} />
       </Field>
 
-      <div className="rounded-xl border border-slate-200 bg-white p-4">
+      <Card className="p-4">
         <Row label="Subtotal" value={money(totals.subtotal)} />
         {sstEnabled ? <Row label="SST (6%)" value={money(totals.sst)} /> : null}
         <Row label="Total" value={money(totals.total)} strong />
-      </div>
+      </Card>
 
       <Button type="submit" className="w-full" disabled={pending}>
         {pending ? "Saving…" : "Save Quote"}
@@ -151,9 +148,9 @@ export function QuoteForm({ quoteId, values }: { quoteId?: string; values?: Quot
 
 function Row({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
-    <div className={`flex justify-between py-1 ${strong ? "border-t border-slate-200 pt-2 text-lg font-bold" : "text-slate-700"}`}>
+    <div className={`flex justify-between py-1 ${strong ? "border-t border-border pt-2 text-lg font-bold" : "text-muted-foreground"}`}>
       <span>{label}</span>
-      <span data-testid={`quote-${label.toLowerCase().split(" ")[0]}`}>{value}</span>
+      <span className="font-mono tabular-nums" data-testid={`quote-${label.toLowerCase().split(" ")[0]}`}>{value}</span>
     </div>
   );
 }

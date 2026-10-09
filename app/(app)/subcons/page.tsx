@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { AddSubcontractorForm } from "@/components/forms/subcontractor-form";
 import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/ui/page-header";
+import { SubconsTable } from "@/components/subcons/subcons-table";
 import { formatRM } from "@/lib/format";
 import { getT } from "@/lib/locale";
 import { prisma } from "@/lib/prisma";
@@ -24,40 +26,60 @@ export default async function SubconsPage() {
 
   return (
     <>
-      <div className="mb-2 flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">{t.subcons}</h1>
+      <PageHeader
+        title={t.subcons}
+        description={
+          <>
+            Total owed to subcontractors:{" "}
+            <span className="font-mono font-semibold text-foreground" data-testid="subcon-total-owed">{money(totalOwed)}</span>
+          </>
+        }
+      >
         <AddSubcontractorForm />
-      </div>
-      <p className="mb-5 text-sm text-slate-600">
-        Total owed to subcontractors:{" "}
-        <span className="font-semibold text-slate-900" data-testid="subcon-total-owed">{money(totalOwed)}</span>
-      </p>
+      </PageHeader>
       {rows.length === 0 ? (
         <EmptyState title="No subcontractors yet" hint="Add your subcons, then link them to SUBCON costs to see what you owe each one." action={<AddSubcontractorForm />} />
       ) : (
-        <div className="space-y-2">
+        <>
+        <div className="hidden md:block">
+          <SubconsTable
+            rows={rows.map(({ sub, agreed, paid, balance }) => ({
+              id: sub.id,
+              name: sub.name,
+              trade: sub.trade,
+              agreed: money(agreed),
+              agreedValue: agreed,
+              paid: money(paid),
+              paidValue: paid,
+              balance: money(balance),
+              balanceValue: balance,
+            }))}
+          />
+        </div>
+        <div className="space-y-2 md:hidden">
           {rows.map(({ sub, agreed, paid, balance }) => (
             <Link
               key={sub.id}
               href={`/subcons/${sub.id}`}
-              className="block rounded-xl border border-slate-200 bg-white p-[0.6rem] hover:border-brand md:p-3"
+              className="block rounded-xl border bg-card p-3 shadow-sm hover:border-primary/40"
             >
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <p className="font-semibold">{sub.name}</p>
-                  <p className="text-sm text-slate-600">{sub.trade ?? "No trade set"}</p>
+                  <p className="text-sm text-muted-foreground">{sub.trade ?? "No trade set"}</p>
                 </div>
-                <p className={`text-right font-bold tabular-nums ${balance > 0 ? "text-pending-dark" : "text-profit-dark"}`}>
+                <p className={`text-right font-mono font-semibold tabular-nums ${balance > 0 ? "text-pending" : "text-profit"}`}>
                   {balance > 0 ? `Owed ${money(balance)}` : "Settled"}
                 </p>
               </div>
               <dl className="mt-2 grid grid-cols-2 gap-2 text-sm">
-                <div><dt className="text-slate-500">Total agreed</dt><dd className="font-semibold">{money(agreed)}</dd></div>
-                <div><dt className="text-slate-500">Total paid</dt><dd className="font-semibold">{money(paid)}</dd></div>
+                <div><dt className="text-muted-foreground">Total agreed</dt><dd className="font-mono text-[13px] font-medium tabular-nums">{money(agreed)}</dd></div>
+                <div><dt className="text-muted-foreground">Total paid</dt><dd className="font-mono text-[13px] font-medium tabular-nums">{money(paid)}</dd></div>
               </dl>
             </Link>
           ))}
         </div>
+        </>
       )}
     </>
   );

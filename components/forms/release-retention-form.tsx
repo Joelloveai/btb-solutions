@@ -24,7 +24,7 @@ function Form({ projectId, outstanding, close }: { projectId: string; outstandin
   });
   return (
     <form onSubmit={handleSubmit((v) => submit(() => releaseRetention(projectId, v)))} className="space-y-3">
-      <p className="text-sm text-slate-600">
+      <p className="text-sm text-muted-foreground">
         Record the retention money the client has paid. It is added to this project&apos;s payments.
       </p>
       <Field label="Date received" error={errors.date?.message}>
