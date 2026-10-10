@@ -31,9 +31,9 @@ export async function GET(_request: Request, { params }: { params: { id: string 
     if (!user?.subcontractorId || photo.kind !== "TASK" || photo.task?.subcontractorId !== user.subcontractorId) return notFound();
   }
 
-  let bytes: Buffer;
+  let bytes: Uint8Array;
   try {
-    bytes = await readPhotoFile(photo.id);
+    bytes = await readPhotoFile(photo);
   } catch {
     return notFound();
   }

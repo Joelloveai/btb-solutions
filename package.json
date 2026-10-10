@@ -8,12 +8,16 @@
     "start": "next start",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "photos:migrate-to-r2": "tsx scripts/migrate-photos-to-r2.ts",
+    "r2:check": "tsx scripts/r2-check.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1149.0",
+    "@aws-sdk/s3-request-presigner": "^3.1149.0",
     "@hookform/resolvers": "^5.9.1",
     "@prisma/client": "^5.22.0",
     "@radix-ui/react-dialog": "^1.2.0",

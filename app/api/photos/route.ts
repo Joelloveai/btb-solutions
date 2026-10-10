@@ -58,11 +58,11 @@ export async function POST(request: Request) {
     data: { projectId, kind, caption, mimeType, size: file.size, uploadedById: session?.user?.id ?? null },
   });
   try {
-    await savePhotoFile(photo.id, bytes);
+    await savePhotoFile(photo, bytes);
   } catch (error) {
     console.error(error);
     await prisma.photo.delete({ where: { id: photo.id } }).catch(() => undefined);
-    await deletePhotoFile(photo.id).catch(() => undefined);
+    await deletePhotoFile(photo).catch(() => undefined);
     return json({ error: "Could not save the photo. Please try again." }, 500);
   }
   return json({ id: photo.id }, 201);

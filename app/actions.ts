@@ -738,8 +738,11 @@ export async function deleteTask(id: string): Promise<ActionResult> {
     const task = await prisma.task.findUnique({ where: { id } });
     await prisma.task.delete({ where: { id } });
     if (task?.photoId) {
-      await prisma.photo.delete({ where: { id: task.photoId } }).catch(() => undefined);
-      await deletePhotoFile(task.photoId).catch(() => undefined);
+      const photo = await prisma.photo.findUnique({ where: { id: task.photoId } });
+      if (photo) {
+        await prisma.photo.delete({ where: { id: photo.id } }).catch(() => undefined);
+        await deletePhotoFile(photo).catch(() => undefined);
+      }
     }
     revalidateAll();
     return { ok: true };
@@ -777,8 +780,10 @@ export async function completeTask(taskId: string, photoId?: string): Promise<Ac
 export async function deletePhoto(id: string): Promise<ActionResult> {
   try {
     await requireSession();
+    const photo = await prisma.photo.findUnique({ where: { id } });
+    if (!photo) return { ok: true };
     await prisma.photo.delete({ where: { id } });
-    await deletePhotoFile(id).catch(() => undefined);
+    await deletePhotoFile(photo).catch(() => undefined);
     revalidateAll();
     return { ok: true };
   } catch (error) {
