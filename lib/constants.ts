@@ -45,3 +45,11 @@ export const QUOTE_STATUS_LABELS: Record<QuoteStatus, string> = {
   ACCEPTED: "Accepted",
   REJECTED: "Rejected",
 };
+
+export const TASK_STATUSES = ["OPEN", "DONE"] as const;
+export type TaskStatus = (typeof TASK_STATUSES)[number];
+
+export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
+  OPEN: "Open",
+  DONE: "Done",
+};

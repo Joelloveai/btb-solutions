@@ -2,7 +2,9 @@
 
 import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
-import { requireSession } from "@/lib/auth";
+import bcrypt from "bcryptjs";
+import { requireSession, requireSub } from "@/lib/auth";
+import { deletePhotoFile } from "@/lib/photos";
 import { computeClaim } from "@/lib/claims";
 import { isLocale } from "@/lib/i18n";
 import { prisma } from "@/lib/prisma";
@@ -11,6 +13,8 @@ import {
   boqLineSchema,
   changeOrderSchema,
   claimSchema,
+  loginUserSchema,
+  taskSchema,
   clientSchema,
   paidDateSchema,
   quoteSchema,
@@ -677,6 +681,169 @@ export async function linkProjectToClient(projectId: string): Promise<ActionResu
       all.find((c) => c.name.trim().toLowerCase() === name.toLowerCase()) ??
       (await prisma.client.create({ data: { name } }));
     await prisma.project.update({ where: { id: projectId }, data: { clientId: client.id, clientName: client.name } });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Tasks and photos
+// ---------------------------------------------------------------------------
+
+export async function createTask(projectId: string, input: unknown): Promise<ActionResult> {
+  try {
+    await requireSession();
+    const parsed = taskSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+    const v = parsed.data;
+    if (v.startDate && v.startDate > v.dueDate) return { ok: false, error: "The start date cannot be after the due date." };
+    await prisma.task.create({
+      data: {
+        projectId,
+        description: v.description,
+        isMilestone: v.isMilestone,
+        // A milestone is a single date with no assignee and no start.
+        subcontractorId: v.isMilestone ? null : orNull(v.subcontractorId),
+        startDate: v.isMilestone || !v.startDate ? null : toDate(v.startDate),
+        dueDate: toDate(v.dueDate),
+      },
+    });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+export async function setTaskStatus(id: string, status: unknown): Promise<ActionResult> {
+  try {
+    await requireSession();
+    if (status !== "OPEN" && status !== "DONE") return { ok: false, error: "Unknown status" };
+    await prisma.task.update({
+      where: { id },
+      data: { status, completedAt: status === "DONE" ? new Date() : null },
+    });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+export async function deleteTask(id: string): Promise<ActionResult> {
+  try {
+    await requireSession();
+    const task = await prisma.task.findUnique({ where: { id } });
+    await prisma.task.delete({ where: { id } });
+    if (task?.photoId) {
+      await prisma.photo.delete({ where: { id: task.photoId } }).catch(() => undefined);
+      await deletePhotoFile(task.photoId).catch(() => undefined);
+    }
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+/** The subcontractor marks one of THEIR tasks done, optionally attaching the photo they just uploaded. */
+export async function completeTask(taskId: string, photoId?: string): Promise<ActionResult> {
+  try {
+    const { user, subcontractorId } = await requireSub();
+    const task = await prisma.task.findUnique({ where: { id: taskId } });
+    if (!task || task.subcontractorId !== subcontractorId) return { ok: false, error: "That task is not assigned to you." };
+    if (task.status === "DONE") return { ok: false, error: "This task is already done." };
+
+    if (photoId) {
+      const photo = await prisma.photo.findUnique({ where: { id: photoId }, include: { task: true } });
+      // Only a photo this user just uploaded for this very project, and not already used, may be attached.
+      if (!photo || photo.kind !== "TASK" || photo.uploadedById !== user.id || photo.projectId !== task.projectId || photo.task) {
+        return { ok: false, error: "That photo cannot be attached." };
+      }
+    }
+    await prisma.task.update({
+      where: { id: taskId },
+      data: { status: "DONE", completedAt: new Date(), photoId: photoId || null },
+    });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+export async function deletePhoto(id: string): Promise<ActionResult> {
+  try {
+    await requireSession();
+    await prisma.photo.delete({ where: { id } });
+    await deletePhotoFile(id).catch(() => undefined);
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Portal logins
+// ---------------------------------------------------------------------------
+
+const isUniqueViolation = (error: unknown) => error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+
+export async function createClientUser(clientId: string, input: unknown): Promise<ActionResult> {
+  try {
+    await requireSession();
+    const parsed = loginUserSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+    const v = parsed.data;
+    await prisma.clientUser.create({
+      data: { clientId, email: v.email, name: orNull(v.name), passwordHash: await bcrypt.hash(v.password, 10) },
+    });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    if (isUniqueViolation(error)) return { ok: false, error: "That email already has portal access." };
+    return failure(error);
+  }
+}
+
+export async function deleteClientUser(id: string): Promise<ActionResult> {
+  try {
+    await requireSession();
+    await prisma.clientUser.delete({ where: { id } });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+export async function createSubcontractorUser(subcontractorId: string, input: unknown): Promise<ActionResult> {
+  try {
+    await requireSession();
+    const parsed = loginUserSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+    const v = parsed.data;
+    await prisma.user.create({
+      data: { subcontractorId, email: v.email, name: orNull(v.name), passwordHash: await bcrypt.hash(v.password, 10) },
+    });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    if (isUniqueViolation(error)) return { ok: false, error: "That email is already in use." };
+    return failure(error);
+  }
+}
+
+export async function deleteSubcontractorUser(id: string): Promise<ActionResult> {
+  try {
+    await requireSession();
+    const user = await prisma.user.findUnique({ where: { id } });
+    // Only task-log logins can be removed here, never a staff account.
+    if (!user?.subcontractorId) return { ok: false, error: "That is not a subcontractor login." };
+    await prisma.user.delete({ where: { id } });
     revalidateAll();
     return { ok: true };
   } catch (error) {

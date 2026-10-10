@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { EditSubcontractorButton } from "@/components/forms/subcontractor-form";
 import { MarkPaidButton } from "@/components/subcons/mark-paid-button";
+import { LoginAccess } from "@/components/portal/login-access";
 import { EmptyState } from "@/components/ui/empty-state";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { PageHeader } from "@/components/ui/page-header";
@@ -16,7 +17,10 @@ export const dynamic = "force-dynamic";
 export default async function SubconPage({ params }: { params: { id: string } }) {
   const sub = await prisma.subcontractor.findUnique({
     where: { id: params.id },
-    include: { costs: { where: { category: "SUBCON" }, orderBy: { date: "desc" }, include: { project: true } } },
+    include: {
+      costs: { where: { category: "SUBCON" }, orderBy: { date: "desc" }, include: { project: true } },
+      users: { orderBy: { createdAt: "asc" } },
+    },
   });
   if (!sub) notFound();
   const locale = await getLocale();
@@ -45,6 +49,15 @@ export default async function SubconPage({ params }: { params: { id: string } })
           <KpiCard label="Balance owed" value={money(agreed.minus(paid).toNumber())} tone={agreed.minus(paid).greaterThan(0) ? "pending" : "neutral"} testId="sub-balance" />
         </div>
       </div>
+
+      <LoginAccess
+        title="Task log login"
+        description="Lets this subcontractor see the tasks you assign them, mark them done and upload a photo."
+        loginPath="/login"
+        users={sub.users.map((u) => ({ id: u.id, email: u.email, name: u.name }))}
+        kind="sub"
+        ownerId={sub.id}
+      />
 
       {sub.costs.length === 0 ? (
         <EmptyState title="No costs linked" hint="When you add a SUBCON cost on a project, pick this subcontractor on it." />

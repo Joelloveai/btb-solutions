@@ -1,12 +1,13 @@
 "use client";
 
-import { signIn } from "next-auth/react";
+import { getSession, signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Field, Input } from "@/components/ui/field";
+import { homeFor } from "@/lib/roles";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -23,7 +24,9 @@ export default function LoginPage() {
     });
     setPending(false);
     if (result?.ok) {
-      router.push("/dashboard");
+      // Staff go to the dashboard; a subcontractor signing in here goes to their task list.
+      const session = await getSession();
+      router.push(homeFor(session?.user?.role ?? "staff"));
       router.refresh();
     } else {
       toast.error("Wrong email or password");

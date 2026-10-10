@@ -1,5 +1,5 @@
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { authOptions, roleOf } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -33,7 +33,7 @@ const day = (date: Date | null) => (date ? date.toISOString().slice(0, 10) : "")
 
 export async function GET() {
   const session = await getServerSession(authOptions);
-  if (!session?.user) return new Response("Not signed in", { status: 401 });
+  if (roleOf(session) !== "staff") return new Response("Not signed in", { status: 401 });
 
   const projects = await prisma.project.findMany({
     orderBy: { createdAt: "asc" },

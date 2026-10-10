@@ -8,12 +8,15 @@ datasource db {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  passwordHash String
-  name         String?
-  locale       String   @default("en")
-  createdAt    DateTime @default(now())
+  id              String         @id @default(cuid())
+  email           String         @unique
+  passwordHash    String
+  name            String?
+  locale          String         @default("en")
+  /// Set for a subcontractor's task-log login; staff users leave it empty.
+  subcontractorId String?
+  subcontractor   Subcontractor? @relation(fields: [subcontractorId], references: [id], onDelete: SetNull)
+  createdAt       DateTime       @default(now())
 }
 
 model Project {
@@ -38,6 +41,8 @@ model Project {
   updatedAt         DateTime      @updatedAt
   Client            Client?       @relation(fields: [clientId], references: [id])
   clientId          String?
+  photos            Photo[]
+  tasks             Task[]
 }
 
 model CostEntry {
@@ -128,6 +133,8 @@ model Subcontractor {
   trade     String?
   bank      String?
   costs     CostEntry[]
+  users     User[]
+  tasks     Task[]
   createdAt DateTime    @default(now())
 }
 
@@ -161,7 +168,7 @@ model QuoteLine {
 }
 
 model Client {
-  id            String    @id @default(cuid())
+  id            String       @id @default(cuid())
   name          String
   contactPerson String?
   phone         String?
@@ -169,6 +176,53 @@ model Client {
   address       String?
   notes         String?
   projects      Project[]
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  portalUsers   ClientUser[]
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+
+/// A client's login to the read-only progress portal. Separate from staff `User`.
+model ClientUser {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  clientId     String
+  client       Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+}
+
+/// An uploaded image. The file lives on disk (UPLOAD_DIR); only metadata is stored here.
+/// kind: PROGRESS (shown to the client), FLOORPLAN (shown to the client), TASK (subcontractor update, staff only).
+model Photo {
+  id           String   @id @default(cuid())
+  projectId    String
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  kind         String   @default("PROGRESS")
+  caption      String?
+  mimeType     String
+  size         Int
+  takenAt      DateTime @default(now())
+  uploadedById String?
+  task         Task?
+  createdAt    DateTime @default(now())
+}
+
+/// A job for a subcontractor (or the contractor's own crew when subcontractorId is empty).
+/// Tasks with startDate/dueDate are what the client sees on the timeline.
+model Task {
+  id              String         @id @default(cuid())
+  projectId       String
+  project         Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  subcontractorId String?
+  subcontractor   Subcontractor? @relation(fields: [subcontractorId], references: [id], onDelete: SetNull)
+  description     String
+  startDate       DateTime?
+  dueDate         DateTime
+  isMilestone     Boolean        @default(false)
+  status          String         @default("OPEN")
+  photoId         String?        @unique
+  photo           Photo?         @relation(fields: [photoId], references: [id], onDelete: SetNull)
+  completedAt     DateTime?
+  createdAt       DateTime       @default(now())
 }

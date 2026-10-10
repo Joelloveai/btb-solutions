@@ -11,7 +11,9 @@ import { ChevronLeft } from "lucide-react";
 import { summarizeProject, type ProjectSummary } from "@/lib/project-summary";
 import { ReleaseRetentionButton } from "@/components/forms/release-retention-form";
 import { PROJECT_STATUS_LABELS, type ProjectStatus } from "@/lib/constants";
-import { formatRM } from "@/lib/format";
+import { formatDate, formatDateTime, formatRM, todayInMalaysia } from "@/lib/format";
+import { reminderLink } from "@/lib/whatsapp";
+import { LoginAccess } from "@/components/portal/login-access";
 import { getT } from "@/lib/locale";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
@@ -31,9 +33,14 @@ export default async function ProjectPage({ params }: { params: { id: string } }
       changeOrders: { orderBy: { date: "desc" } },
       boqLines: { orderBy: { position: "asc" } },
       claims: { orderBy: { number: "asc" }, include: { payments: true } },
+      photos: { orderBy: { takenAt: "desc" } },
+      tasks: { orderBy: { dueDate: "asc" }, include: { subcontractor: true } },
     },
   });
   if (!project) notFound();
+  const portalUsers = project.clientId
+    ? await prisma.clientUser.findMany({ where: { clientId: project.clientId }, orderBy: { createdAt: "asc" } })
+    : [];
   const subcons = await prisma.subcontractor.findMany({ orderBy: { name: "asc" } });
 
   const { locale, t } = await getT();
@@ -43,6 +50,11 @@ export default async function ProjectPage({ params }: { params: { id: string } }
   const contractWithSst = new Prisma.Decimal(totals.revisedContractValue).plus(totals.sstAmount).toNumber();
   const inProfit = totals.profitLoss >= 0;
   const status = project.status as ProjectStatus;
+  const toPhotoItem = (p: { id: string; caption: string | null; takenAt: Date }) => ({
+    id: p.id,
+    caption: p.caption,
+    takenAtText: formatDateTime(p.takenAt, locale),
+  });
 
   const boqLabel = (id: string | null) => {
     const i = project.boqLines.findIndex((b) => b.id === id);
@@ -139,10 +151,45 @@ export default async function ProjectPage({ params }: { params: { id: string } }
         </div>
       </div>
 
+      {project.clientId ? (
+        <LoginAccess
+          title="Client portal access"
+          description="Lets this client see progress photos, floor plans and the timeline. They never see costs or claims."
+          loginPath="/client/login"
+          users={portalUsers.map((u) => ({ id: u.id, email: u.email, name: u.name }))}
+          kind="client"
+          ownerId={project.clientId}
+        />
+      ) : null}
+
       <RetentionCard projectId={project.id} status={project.status} summary={summary} money={money} />
 
       <ProjectTabs
         projectId={project.id}
+        photos={project.photos.filter((p) => p.kind === "PROGRESS").map(toPhotoItem)}
+        floorPlans={project.photos.filter((p) => p.kind === "FLOORPLAN").map(toPhotoItem)}
+        tasks={project.tasks.map((task) => ({
+          id: task.id,
+          description: task.description,
+          isMilestone: task.isMilestone,
+          subcontractorName: task.subcontractor?.name ?? null,
+          dueText: formatDate(task.dueDate, locale),
+          status: task.status as "OPEN" | "DONE",
+          overdue: task.status === "OPEN" && task.dueDate < todayInMalaysia(),
+          completedText: task.completedAt ? formatDateTime(task.completedAt, locale) : null,
+          photoId: task.photoId,
+          hasSub: !!task.subcontractor,
+          reminderHref: task.subcontractor
+            ? reminderLink({
+                phone: task.subcontractor.contact,
+                name: task.subcontractor.name,
+                task: task.description,
+                project: project.name,
+                due: formatDate(task.dueDate, "en"),
+                appUrl: process.env.NEXTAUTH_URL ?? "http://localhost:3000",
+              })
+            : null,
+        }))}
         lookups={lookups}
         boq={boqRows}
         unallocatedActual={unallocatedActual}

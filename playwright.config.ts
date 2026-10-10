@@ -7,6 +7,7 @@ const env = {
   NEXTAUTH_SECRET: "e2e-secret",
   SEED_EMAIL: "boss@btb.my",
   SEED_PASSWORD: "btb12345",
+  UPLOAD_DIR: "./uploads-test",
 };
 
 export default defineConfig({

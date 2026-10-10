@@ -17,6 +17,9 @@ import { AddBoqLineForm, EditBoqLineButton } from "@/components/forms/boq-line-f
 import { DeleteIconButton } from "@/components/forms/row-actions";
 import { MarkPaidButton } from "@/components/subcons/mark-paid-button";
 import type { Lookups } from "./lookups";
+import { PhotoGallery, type PhotoItem } from "@/components/photos/photo-gallery";
+import { PhotoUpload } from "@/components/photos/photo-upload";
+import { TasksPanel, type TaskRow } from "@/components/tasks/tasks-panel";
 import { AddChangeOrderForm } from "@/components/forms/add-change-order-form";
 import { AddCostForm } from "@/components/forms/add-cost-form";
 import { AddPaymentForm } from "@/components/forms/add-payment-form";
@@ -83,6 +86,8 @@ const TABS = [
   { id: "payments", label: "payments" },
   { id: "changes", label: "changeOrders" },
   { id: "boq", label: "BOQ" },
+  { id: "photos", label: "Progress Photos" },
+  { id: "tasks", label: "Tasks" },
 ] as const;
 
 const tone = { PENDING: "yellow", APPROVED: "green", REJECTED: "red" } as const;
@@ -95,6 +100,9 @@ export function ProjectTabs({
   boq,
   unallocatedActual,
   lookups,
+  photos,
+  floorPlans,
+  tasks,
 }: {
   projectId: string;
   costs: CostRow[];
@@ -104,15 +112,18 @@ export function ProjectTabs({
   /** Costs that are not linked to any BOQ line. */
   unallocatedActual: number;
   lookups: Lookups;
+  photos: PhotoItem[];
+  floorPlans: PhotoItem[];
+  tasks: TaskRow[];
 }) {
   const t = useT();
 
   return (
     <Tabs defaultValue="costs" className="w-full">
-      <TabsList>
+      <TabsList className="flex overflow-x-auto">
         {TABS.map((item) => (
-          <TabsTrigger key={item.id} value={item.id}>
-            {item.label === "BOQ" ? "BOQ" : t[item.label]}
+          <TabsTrigger key={item.id} value={item.id} className="shrink-0 flex-1 px-3">
+            {item.label in t ? t[item.label as keyof typeof t] : item.label}
           </TabsTrigger>
         ))}
       </TabsList>
@@ -127,6 +138,22 @@ export function ProjectTabs({
       </TabsContent>
       <TabsContent value="boq">
         <BoqPanel projectId={projectId} rows={boq} unallocatedActual={unallocatedActual} />
+      </TabsContent>
+      <TabsContent value="photos">
+        <div className="space-y-6">
+          <section aria-label="Progress photos" className="space-y-3">
+            <PhotoUpload kind="PROGRESS" projectId={projectId} label="Add progress photo" />
+            <PhotoGallery photos={photos} canDelete emptyText="No progress photos yet. Photos you add here appear in the client's portal." />
+          </section>
+          <section aria-label="Floor plans" className="space-y-3">
+            <h3 className="text-sm font-semibold">Floor plans</h3>
+            <PhotoUpload kind="FLOORPLAN" projectId={projectId} label="Add floor plan" />
+            <PhotoGallery photos={floorPlans} canDelete emptyText="No floor plan uploaded." />
+          </section>
+        </div>
+      </TabsContent>
+      <TabsContent value="tasks">
+        <TasksPanel projectId={projectId} rows={tasks} lookups={lookups} />
       </TabsContent>
     </Tabs>
   );

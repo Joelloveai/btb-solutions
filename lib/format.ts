@@ -36,3 +36,15 @@ export function todayInMalaysia(): Date {
   const ymd = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kuala_Lumpur" }).format(new Date());
   return new Date(`${ymd}T00:00:00.000Z`);
 }
+
+/** Date and time for things that happen at a moment (photos, completions), in Malaysia time. */
+export function formatDateTime(value: Date | string, locale: Locale = "en"): string {
+  return new Date(value).toLocaleString(intlLocale(locale), {
+    timeZone: "Asia/Kuala_Lumpur",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}

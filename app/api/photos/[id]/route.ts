@@ -1,0 +1,49 @@
+import { getServerSession } from "next-auth";
+import { authOptions, roleOf } from "@/lib/auth";
+import { readPhotoFile } from "@/lib/photos";
+import { prisma } from "@/lib/prisma";
+
+export const dynamic = "force-dynamic";
+
+const notFound = () => new Response("Not found", { status: 404 });
+
+/**
+ * Photos are never public. Who may see one:
+ *  - staff:  any photo
+ *  - client: progress photos and floor plans of projects belonging to their own client record
+ *  - sub:    the photos they uploaded for their own tasks
+ * Anything else is a 404, so a guessed id reveals nothing.
+ */
+export async function GET(_request: Request, { params }: { params: { id: string } }) {
+  const session = await getServerSession(authOptions);
+  const role = roleOf(session);
+  if (!role || !session?.user) return new Response("Not signed in", { status: 401 });
+
+  const photo = await prisma.photo.findUnique({ where: { id: params.id }, include: { project: true, task: true } });
+  if (!photo) return notFound();
+
+  if (role === "client") {
+    const user = session.user.id ? await prisma.clientUser.findUnique({ where: { id: session.user.id } }) : null;
+    const visible = photo.kind === "PROGRESS" || photo.kind === "FLOORPLAN";
+    if (!user || !visible || !photo.project.clientId || photo.project.clientId !== user.clientId) return notFound();
+  } else if (role === "sub") {
+    const user = session.user.id ? await prisma.user.findUnique({ where: { id: session.user.id } }) : null;
+    if (!user?.subcontractorId || photo.kind !== "TASK" || photo.task?.subcontractorId !== user.subcontractorId) return notFound();
+  }
+
+  let bytes: Buffer;
+  try {
+    bytes = await readPhotoFile(photo.id);
+  } catch {
+    return notFound();
+  }
+  return new Response(new Uint8Array(bytes), {
+    headers: {
+      "Content-Type": photo.mimeType,
+      "Content-Length": String(bytes.length),
+      "Content-Disposition": "inline",
+      "X-Content-Type-Options": "nosniff",
+      "Cache-Control": "private, max-age=3600",
+    },
+  });
+}

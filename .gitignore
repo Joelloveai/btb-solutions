@@ -6,3 +6,6 @@ node_modules
 test-results
 playwright-report
 screenshots/.tmp
+# uploaded photos live on disk, never in git
+/uploads
+/uploads-test

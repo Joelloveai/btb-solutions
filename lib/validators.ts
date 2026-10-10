@@ -132,3 +132,20 @@ export type BoqLineInput = z.infer<typeof boqLineSchema>;
 export type ClaimInput = z.infer<typeof claimSchema>;
 export type SubcontractorInput = z.infer<typeof subcontractorSchema>;
 export type ClientInput = z.infer<typeof clientSchema>;
+
+export const taskSchema = z.object({
+  description: z.string().trim().min(1, "Enter what needs doing").max(200),
+  subcontractorId: z.string().optional().or(z.literal("")),
+  startDate: dateString.optional().or(z.literal("")),
+  dueDate: dateString,
+  isMilestone: z.boolean(),
+});
+
+export const loginUserSchema = z.object({
+  email: z.string().trim().toLowerCase().email("Enter a valid email").max(200),
+  password: z.string().min(8, "Use at least 8 characters").max(100),
+  name: z.string().trim().max(120).optional().or(z.literal("")),
+});
+
+export type TaskInput = z.infer<typeof taskSchema>;
+export type LoginUserInput = z.infer<typeof loginUserSchema>;
