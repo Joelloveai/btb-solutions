@@ -107,6 +107,22 @@ export class PdfKit {
     }
   }
 
+  /** One table row: each cell wraps inside its own column width (points). */
+  columns(cells: string[], widths: number[], opts: { bold?: boolean; size?: number } = {}) {
+    const size = opts.size ?? 9;
+    const font = opts.bold ? this.bold : this.regular;
+    const wrapped = cells.map((c, i) => this.wrap(c, font, size, widths[i]! - 6));
+    const lines = Math.max(...wrapped.map((w) => w.length));
+    this.ensure(lines * size * 1.4 + 4);
+    let x = MARGIN;
+    wrapped.forEach((cell, i) => {
+      cell.forEach((line, k) => this.page.drawText(line, { x, y: this.y - size - k * size * 1.4, size, font, color: rgb(0.1, 0.1, 0.12) }));
+      x += widths[i]!;
+    });
+    this.y -= lines * size * 1.4 + 3;
+    this.page.drawLine({ start: { x: MARGIN, y: this.y + 1 }, end: { x: MARGIN + this.width, y: this.y + 1 }, thickness: 0.3, color: rgb(0.85, 0.85, 0.88) });
+  }
+
   /** Embeds a JPEG or PNG scaled to fit. Returns false for any other format (the caller notes it). */
   async image(bytes: Uint8Array, mime: string, maxWidth: number, maxHeight: number): Promise<boolean> {
     let img: PDFImage;

@@ -85,6 +85,7 @@ export async function createProject(input: unknown): Promise<ActionResult<{ id: 
         startDate: v.startDate ? toDate(v.startDate) : null,
         sstEnabled: v.sstEnabled,
         retentionPercent: v.retentionPercent,
+        contractRef: orNull(v.contractRef),
       },
     });
     revalidatePath("/dashboard");
@@ -118,6 +119,7 @@ export async function updateProject(id: string, input: unknown): Promise<ActionR
         startDate: v.startDate ? toDate(v.startDate) : null,
         sstEnabled: v.sstEnabled,
         retentionPercent: v.retentionPercent,
+        contractRef: orNull(v.contractRef),
         ...(v.status ? { status: v.status } : {}),
       },
     });

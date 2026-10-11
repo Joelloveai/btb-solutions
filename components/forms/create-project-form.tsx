@@ -19,7 +19,7 @@ function Form({ close }: { close: () => void }) {
     formState: { errors },
   } = useForm<ProjectInput>({
     resolver: zodResolver(projectSchema),
-    defaultValues: { name: "", clientId: "", contractValue: "", startDate: "", sstEnabled: false, retentionPercent: "5.00" },
+    defaultValues: { name: "", clientId: "", contractValue: "", contractRef: "", startDate: "", sstEnabled: false, retentionPercent: "5.00" },
   });
 
   return (

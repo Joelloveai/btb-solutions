@@ -20,6 +20,7 @@ import { getT } from "@/lib/locale";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { evidenceQuality } from "@/lib/evidence-quality";
 import { fetchTimelinePage } from "@/lib/timeline-query";
 import { Prisma } from "@prisma/client";
 import { LinkClientButton } from "@/components/clients/link-client-button";
@@ -49,6 +50,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
   });
   if (!project) notFound();
   const timeline = await fetchTimelinePage(project.id, "all");
+  const quality = evidenceQuality(project.photos, project.costs);
   const viewerId = (await getServerSession(authOptions))?.user?.id ?? null;
   const diaries = await prisma.siteDiary.findMany({ where: { projectId: project.id }, orderBy: { date: "desc" } });
   const uploaderEmails = new Map(
@@ -157,6 +159,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
             name: project.name,
             clientId: project.clientId ?? "",
             contractValue: project.contractValue.toFixed(2),
+            contractRef: project.contractRef ?? "",
             startDate: project.startDate ? project.startDate.toISOString().slice(0, 10) : "",
             sstEnabled: project.sstEnabled,
             retentionPercent: project.retentionPercent.toFixed(2),
@@ -166,6 +169,9 @@ export default async function ProjectPage({ params }: { params: { id: string } }
         <Link href={`/projects/${project.id}/claims`} className={linkButton("accent", true)}>
           Progress Claims
         </Link>
+        <a href={`/api/projects/${project.id}/cipaa-pack`} className={linkButton("secondary", true)}>
+          Generate CIPAA Pack
+        </a>
       </PageHeader>
       {!project.clientId && project.clientName ? (
         <div className="-mt-3 mb-4 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
@@ -234,6 +240,17 @@ export default async function ProjectPage({ params }: { params: { id: string } }
         }}
       />
 
+      <p className="mb-3 rounded-lg border bg-card px-3 py-2 text-sm" data-testid="evidence-quality">
+        <span className="font-medium">Evidence quality: {quality.percent === null ? "nothing recorded yet" : `${quality.percent}%`}</span>
+        {quality.percent !== null && quality.percent < 100 ? (
+          <span className="text-muted-foreground">
+            {" "}
+            · {quality.photosMissingLocation > 0 ? `${quality.photosMissingLocation} photo${quality.photosMissingLocation === 1 ? "" : "s"} without a location` : ""}
+            {quality.photosMissingLocation > 0 && quality.costsMissingReference > 0 ? ", " : ""}
+            {quality.costsMissingReference > 0 ? `${quality.costsMissingReference} cost${quality.costsMissingReference === 1 ? "" : "s"} without an invoice reference` : ""}
+          </span>
+        ) : null}
+      </p>
       <ProjectTabs
         projectId={project.id}
         timeline={timeline}

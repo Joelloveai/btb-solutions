@@ -1,6 +1,7 @@
 "use client";
 
 import { Camera, MapPin, MapPinOff } from "lucide-react";
+import { toast } from "sonner";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/field";
@@ -112,6 +113,8 @@ export function PhotoUpload({
         remember("btb-photo-phase", phase);
       }
       const stored = await toStoredFile(await shrink(file), file.name);
+      // A nudge, never a block: the photo is saved either way.
+      if (!position) toast.message("Add location to strengthen this as evidence.", { description: "Allow location access in your browser settings." });
       submit({
         type: "uploadPhoto",
         label: `Photo${caption ? `: ${caption}` : ""}`,

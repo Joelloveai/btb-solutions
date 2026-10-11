@@ -2,6 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, useWatch } from "react-hook-form";
+import { toast } from "sonner";
 import type { Lookups } from "@/components/projects/lookups";
 import { updateCost } from "@/app/actions";
 import { Button } from "@/components/ui/button";
@@ -54,7 +55,8 @@ export function CostFormBody({
     <form onSubmit={handleSubmit((values) =>
       editing
         ? update.submit(() => updateCost(editing.id, values))
-        : add.submit({ type: "addCost", projectId, label: `Cost: RM ${values.amount} · ${values.description}`, payload: { input: values } }),
+        : (!values.reference?.trim() && toast.message("Add invoice reference to strengthen this as evidence.", { description: "Open “More” on the next cost to add one." }),
+          add.submit({ type: "addCost", projectId, label: `Cost: RM ${values.amount} · ${values.description}`, payload: { input: values } })),
     )} className="space-y-3">
       <Field label="Amount (RM)" error={errors.amount?.message}>
         <Input {...register("amount")} type="number" step="0.01" inputMode="decimal" autoFocus />

@@ -30,6 +30,9 @@ export function ProjectFields({
       <Field label="Contract value (RM)" error={errors.contractValue?.message}>
         <Input {...register("contractValue")} type="number" step="0.01" inputMode="decimal" placeholder="150000" />
       </Field>
+      <Field label="Contract reference (optional)" error={errors.contractRef?.message}>
+        <Input {...register("contractRef")} placeholder="e.g. Letter of Award ref." />
+      </Field>
       <Field label="Start date (optional)" error={errors.startDate?.message}>
         <Input {...register("startDate")} type="date" />
       </Field>

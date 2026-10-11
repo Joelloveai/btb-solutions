@@ -26,6 +26,7 @@ export const projectSchema = z.object({
   name: z.string().trim().min(1, "Enter a project name").max(120),
   clientId: z.string().optional().or(z.literal("")),
   contractValue: positiveMoney,
+  contractRef: z.string().trim().max(80).optional().or(z.literal("")),
   startDate: dateString.optional().or(z.literal("")),
   sstEnabled: z.boolean(),
   retentionPercent: z
