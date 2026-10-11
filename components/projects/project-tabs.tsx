@@ -24,6 +24,7 @@ import { BEFORE_COVER_ITEMS } from "@/lib/constants";
 import { Download } from "lucide-react";
 import { PhotoGallery, type PhotoItem } from "@/components/photos/photo-gallery";
 import { PhotoUpload } from "@/components/photos/photo-upload";
+import { PunchPanel, type PunchRow } from "@/components/punch/punch-panel";
 import { TasksPanel, type TaskRow } from "@/components/tasks/tasks-panel";
 import { AddChangeOrderForm } from "@/components/forms/add-change-order-form";
 import { AddCostForm } from "@/components/forms/add-cost-form";
@@ -93,6 +94,7 @@ const TABS = [
   { id: "boq", label: "BOQ" },
   { id: "photos", label: "Progress Photos" },
   { id: "tasks", label: "Tasks" },
+  { id: "punch", label: "Punch List" },
 ] as const;
 
 const tone = { PENDING: "yellow", APPROVED: "green", REJECTED: "red" } as const;
@@ -109,6 +111,7 @@ export function ProjectTabs({
   checklistCounts,
   floorPlans,
   tasks,
+  punch,
 }: {
   projectId: string;
   costs: CostRow[];
@@ -123,8 +126,10 @@ export function ProjectTabs({
   checklistCounts: Record<string, number>;
   floorPlans: PhotoItem[];
   tasks: TaskRow[];
+  punch: PunchRow[];
 }) {
   const t = useT();
+  const openPunch = punch.filter((p) => p.status !== "CLOSED").length;
   const beforeCoverMissing = BEFORE_COVER_ITEMS.filter((item) => !checklistCounts[item.key]).length;
 
   return (
@@ -133,6 +138,11 @@ export function ProjectTabs({
         {TABS.map((item) => (
           <TabsTrigger key={item.id} value={item.id} className="shrink-0 flex-1 px-3">
             {item.label in t ? t[item.label as keyof typeof t] : item.label}
+            {item.id === "punch" && openPunch > 0 ? (
+              <span aria-hidden="true" className="ml-1.5 rounded-full bg-pending-light px-1.5 text-[10px] font-semibold text-pending-dark">
+                {openPunch}
+              </span>
+            ) : null}
             {item.id === "photos" && beforeCoverMissing > 0 ? (
               <span aria-hidden="true" className="ml-1.5 rounded-full bg-pending-light px-1.5 text-[10px] font-semibold text-pending-dark">
                 {beforeCoverMissing}
@@ -176,6 +186,10 @@ export function ProjectTabs({
             <PhotoGallery photos={floorPlans} canDelete emptyText="No floor plan uploaded." />
           </section>
         </div>
+      </TabsContent>
+      <TabsContent value="punch">
+        <PendingOps projectId={projectId} types={["createPunch"]} />
+        <PunchPanel projectId={projectId} rows={punch} lookups={lookups} />
       </TabsContent>
       <TabsContent value="tasks">
         <PendingOps projectId={projectId} types={["createTask", "completeTask"]} />

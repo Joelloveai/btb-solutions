@@ -1,6 +1,7 @@
 import { PendingOps } from "@/components/offline/pending-ops";
 import { ImageViewer } from "@/components/photos/image-viewer";
 import { PortalHeader } from "@/components/portal/portal-header";
+import { SubNav } from "@/components/portal/sub-nav";
 import { TaskDoneForm } from "@/components/tasks/task-done-form";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -27,6 +28,7 @@ export default async function SubTasksPage() {
   return (
     <>
       <PortalHeader title="My tasks" home="/sub/tasks" signOutTo="/login" />
+      <SubNav />
       <p className="mb-4 text-sm text-muted-foreground">
         {sub?.name ?? user.email} · {open.length} open
       </p>

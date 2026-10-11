@@ -43,6 +43,7 @@ model Project {
   clientId          String?
   photos            Photo[]
   tasks             Task[]
+  punchItems        PunchItem[]
 }
 
 model CostEntry {
@@ -131,15 +132,16 @@ model Claim {
 }
 
 model Subcontractor {
-  id        String      @id @default(cuid())
-  name      String
-  contact   String?
-  trade     String?
-  bank      String?
-  costs     CostEntry[]
-  users     User[]
-  tasks     Task[]
-  createdAt DateTime    @default(now())
+  id         String      @id @default(cuid())
+  name       String
+  contact    String?
+  trade      String?
+  bank       String?
+  costs      CostEntry[]
+  users      User[]
+  tasks      Task[]
+  punchItems PunchItem[]
+  createdAt  DateTime    @default(now())
 }
 
 model Quote {
@@ -199,17 +201,19 @@ model ClientUser {
 /// An uploaded image. The file lives on disk (UPLOAD_DIR); only metadata is stored here.
 /// kind: PROGRESS (shown to the client), FLOORPLAN (shown to the client), TASK (subcontractor update, staff only).
 model Photo {
-  id              String    @id @default(cuid())
+  id              String     @id @default(cuid())
   projectId       String
-  project         Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  kind            String    @default("PROGRESS")
+  project         Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  kind            String     @default("PROGRESS")
   caption         String?
   mimeType        String
   size            Int
-  takenAt         DateTime  @default(now())
+  takenAt         DateTime   @default(now())
   uploadedById    String?
   task            Task?
-  createdAt       DateTime  @default(now())
+  punchIssue      PunchItem? @relation("PunchIssuePhoto")
+  punchFix        PunchItem? @relation("PunchFixPhoto")
+  createdAt       DateTime   @default(now())
   /// Evidence metadata. capturedAt is the DEVICE clock when the photo was taken; createdAt is the server clock when it arrived.
   capturedAt      DateTime?
   latitude        Float?
@@ -226,7 +230,7 @@ model Photo {
   /// SHA-256 of the stored file, computed on arrival, so a later evidence package can prove the file is unchanged.
   sha256          String?
   /// Set by offline-capable clients. A retried upload with the same id is recognised and not applied twice.
-  clientRequestId String?   @unique
+  clientRequestId String?    @unique
 }
 
 /// A job for a subcontractor (or the contractor's own crew when subcontractorId is empty).
@@ -247,5 +251,33 @@ model Task {
   completedAt     DateTime?
   createdAt       DateTime       @default(now())
   /// Set by offline-capable clients. A retried upload with the same id is recognised and not applied twice.
+  clientRequestId String?        @unique
+}
+
+/// A defect to be fixed before handover. OPEN -> DONE (the subcontractor says it is fixed) -> CLOSED (the contractor has checked it).
+model PunchItem {
+  id              String         @id @default(cuid())
+  projectId       String
+  project         Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  /// Free text, e.g. "Level 3, Unit 12, Master Bath"
+  location        String
+  description     String
+  /// One of PHOTO_TRADES (lib/constants.ts)
+  trade           String
+  subcontractorId String?
+  subcontractor   Subcontractor? @relation(fields: [subcontractorId], references: [id], onDelete: SetNull)
+  status          String         @default("OPEN")
+  dueDate         DateTime?
+  /// The photo of the defect, taken when the item was raised.
+  photoId         String?        @unique
+  photo           Photo?         @relation("PunchIssuePhoto", fields: [photoId], references: [id], onDelete: SetNull)
+  /// The photo of the fix, taken by the subcontractor.
+  resolvedPhotoId String?        @unique
+  resolvedPhoto   Photo?         @relation("PunchFixPhoto", fields: [resolvedPhotoId], references: [id], onDelete: SetNull)
+  createdAt       DateTime       @default(now())
+  /// When the subcontractor marked it fixed.
+  resolvedAt      DateTime?
+  /// When the contractor checked it and closed it.
+  closedAt        DateTime?
   clientRequestId String?        @unique
 }

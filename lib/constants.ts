@@ -72,3 +72,13 @@ export const BEFORE_COVER_ITEMS = [
   { key: "INWALL_PLUMBING", label: "In-wall plumbing", trade: "Plumbing" },
 ] as const satisfies readonly { key: string; label: string; trade: PhotoTrade }[];
 export type BeforeCoverKey = (typeof BEFORE_COVER_ITEMS)[number]["key"];
+
+/** OPEN -> DONE (the subcontractor says it is fixed) -> CLOSED (the contractor has checked it). */
+export const PUNCH_STATUSES = ["OPEN", "DONE", "CLOSED"] as const;
+export type PunchStatus = (typeof PUNCH_STATUSES)[number];
+
+export const PUNCH_STATUS_LABELS: Record<PunchStatus, string> = {
+  OPEN: "Open",
+  DONE: "Fixed, to verify",
+  CLOSED: "Closed",
+};

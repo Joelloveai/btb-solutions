@@ -61,3 +61,26 @@ describe("tradeTagFor", () => {
     expect(tradeTagFor(null)).toBe("Other");
   });
 });
+
+import { groupPunchItems } from "@/lib/punch";
+
+describe("groupPunchItems", () => {
+  const item = (id: string, trade: string, location: string) => ({ id, trade, location, description: id });
+  it("groups by trade in the standard order, then by place in natural order", () => {
+    const groups = groupPunchItems([
+      item("a", "Painting", "Level 10, Unit 2"),
+      item("b", "Plumbing", "Level 3, Unit 12"),
+      item("c", "Painting", "Level 2, Unit 5"),
+      item("d", "Painting", "Level 2, Unit 5"),
+      item("e", "Mystery trade", "Roof"),
+    ]);
+    expect(groups.map((g) => g.trade)).toEqual(["Plumbing", "Painting", "Mystery trade"]);
+    const painting = groups.find((g) => g.trade === "Painting")!;
+    expect(painting.locations.map((l) => l.location)).toEqual(["Level 2, Unit 5", "Level 10, Unit 2"]);
+    expect(painting.locations[0]!.items.map((i) => i.id)).toEqual(["c", "d"]);
+  });
+  it("ignores stray spaces when matching places", () => {
+    const [group] = groupPunchItems([item("a", "Tiling", "Kitchen "), item("b", "Tiling", "Kitchen")]);
+    expect(group!.locations).toHaveLength(1);
+  });
+});

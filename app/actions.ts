@@ -14,6 +14,7 @@ import {
   changeOrderSchema,
   claimSchema,
   loginUserSchema,
+  punchSchema,
   taskSchema,
   clientSchema,
   paidDateSchema,
@@ -868,6 +869,120 @@ export async function deleteSubcontractorUser(id: string): Promise<ActionResult>
     // Only task-log logins can be removed here, never a staff account.
     if (!user?.subcontractorId) return { ok: false, error: "That is not a subcontractor login." };
     await prisma.user.delete({ where: { id } });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Punch list
+// ---------------------------------------------------------------------------
+
+/** Contractor raises a defect, optionally with the photo of it (uploaded first as a PUNCH photo of this project). */
+export async function createPunchItem(projectId: string, input: unknown, requestId?: string, photoId?: string): Promise<ActionResult> {
+  const rid = requestIdOf(requestId);
+  try {
+    await requireSession();
+    const parsed = punchSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+    const v = parsed.data;
+    if (photoId) {
+      const photo = await prisma.photo.findUnique({ where: { id: photoId }, include: { punchIssue: true, punchFix: true } });
+      if (!photo || photo.kind !== "PUNCH" || photo.projectId !== projectId || photo.punchIssue || photo.punchFix) {
+        return { ok: false, error: "That photo cannot be attached." };
+      }
+    }
+    await prisma.punchItem.create({
+      data: {
+        projectId,
+        location: v.location,
+        description: v.description,
+        trade: v.trade,
+        subcontractorId: orNull(v.subcontractorId),
+        dueDate: v.dueDate ? toDate(v.dueDate) : null,
+        photoId: photoId || null,
+        clientRequestId: rid,
+      },
+    });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    if (alreadyApplied(error, rid)) return { ok: true };
+    return failure(error);
+  }
+}
+
+export async function assignPunchItem(id: string, subcontractorId: string): Promise<ActionResult> {
+  try {
+    await requireSession();
+    await prisma.punchItem.update({ where: { id }, data: { subcontractorId: orNull(subcontractorId) } });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+/** The subcontractor says it is fixed, with a photo of the fix. A repeat (retry, double tap) is a success. */
+export async function resolvePunchItem(id: string, photoId?: string): Promise<ActionResult> {
+  try {
+    const { user, subcontractorId } = await requireSub();
+    const item = await prisma.punchItem.findUnique({ where: { id } });
+    if (!item || item.subcontractorId !== subcontractorId) return { ok: false, error: "That item is not assigned to you." };
+    if (item.status !== "OPEN") return { ok: true };
+    if (photoId) {
+      const photo = await prisma.photo.findUnique({ where: { id: photoId }, include: { punchIssue: true, punchFix: true } });
+      if (!photo || photo.kind !== "PUNCH" || photo.uploadedById !== user.id || photo.projectId !== item.projectId || photo.punchIssue || photo.punchFix) {
+        return { ok: false, error: "That photo cannot be attached." };
+      }
+    }
+    await prisma.punchItem.update({ where: { id }, data: { status: "DONE", resolvedAt: new Date(), resolvedPhotoId: photoId || null } });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+/** The contractor has looked at the fix and is satisfied. */
+export async function closePunchItem(id: string): Promise<ActionResult> {
+  try {
+    await requireSession();
+    await prisma.punchItem.update({ where: { id }, data: { status: "CLOSED", closedAt: new Date() } });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+/** The fix was not good enough: back to the subcontractor. */
+export async function reopenPunchItem(id: string): Promise<ActionResult> {
+  try {
+    await requireSession();
+    await prisma.punchItem.update({ where: { id }, data: { status: "OPEN", resolvedAt: null, closedAt: null, resolvedPhotoId: null } });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+export async function deletePunchItem(id: string): Promise<ActionResult> {
+  try {
+    await requireSession();
+    const item = await prisma.punchItem.findUnique({ where: { id } });
+    await prisma.punchItem.delete({ where: { id } });
+    for (const photoId of [item?.photoId, item?.resolvedPhotoId]) {
+      if (!photoId) continue;
+      const photo = await prisma.photo.findUnique({ where: { id: photoId } });
+      if (photo) {
+        await prisma.photo.delete({ where: { id: photo.id } }).catch(() => undefined);
+        await deletePhotoFile(photo).catch(() => undefined);
+      }
+    }
     revalidateAll();
     return { ok: true };
   } catch (error) {

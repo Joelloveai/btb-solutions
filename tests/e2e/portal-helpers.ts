@@ -102,3 +102,36 @@ export async function attachPhotoTakenDaysAgo(page: Page, inputLabel: string, da
     { base64: PNG.toString("base64"), name, modified: Date.now() - daysAgo * 24 * 60 * 60 * 1000 },
   );
 }
+
+/** Staff: create a subcontractor (with a phone number) and a task-log login for them. Returns the login email. */
+export async function createSubWithLogin(page: Page, subName: string, email: string, options: { trade?: string; phone?: string } = {}) {
+  await page.goto("/subcons");
+  await page.getByRole("button", { name: "+ New Subcontractor" }).first().click();
+  let dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Name", { exact: true }).fill(subName);
+  if (options.phone) await dialog.getByLabel("Contact (phone)").fill(options.phone);
+  if (options.trade) await dialog.getByLabel("Trade").fill(options.trade);
+  await dialog.getByRole("button", { name: "Save subcontractor" }).click();
+  await expect(dialog).toBeHidden();
+  await page.getByRole("link").filter({ hasText: subName }).first().click();
+  await page.waitForURL(/\/subcons\/[^/]+$/);
+  await page.getByRole("region", { name: "Task log login" }).getByRole("button", { name: "+ Add login" }).click();
+  dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Login email").fill(email);
+  await dialog.getByLabel(/Temporary password/).fill(PASSWORD);
+  await dialog.getByRole("button", { name: "Create login" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole("region", { name: "Task log login" })).toContainText(email);
+  return email;
+}
+
+/** The subcontractor signs in on their own phone (a fresh browser context). */
+export async function signInSub(browser: Browser, email: string) {
+  const v = await visitor(browser);
+  await v.page.goto("/login");
+  await v.page.getByLabel("Email").fill(email);
+  await v.page.getByLabel("Password").fill(PASSWORD);
+  await v.page.getByRole("button", { name: "Sign in" }).click();
+  await expect(v.page).toHaveURL(/\/sub\/tasks$/);
+  return v;
+}

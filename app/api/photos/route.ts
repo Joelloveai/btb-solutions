@@ -12,8 +12,8 @@ const json = (body: unknown, status = 200) => Response.json(body, { status, head
 
 /**
  * Upload one photo (multipart: file, kind, caption, projectId or taskId).
- *  - staff:  PROGRESS or FLOORPLAN for a project (shown to the client), or TASK for a task
- *  - sub:    TASK only, for an open task assigned to them
+ *  - staff:  PROGRESS or FLOORPLAN for a project (shown to the client), TASK for a task, PUNCH for a defect
+ *  - sub:    TASK for an open task, or PUNCH for an open punch item, assigned to them
  * Clients cannot upload.
  */
 export async function POST(request: Request) {
@@ -64,6 +64,21 @@ export async function POST(request: Request) {
       defaultTrade = tradeTagFor(sub?.trade);
     }
     projectId = task.projectId;
+  } else if (kind === "PUNCH") {
+    // The photo of a defect (staff, when raising it) or of its fix (the assigned subcontractor).
+    if (role === "sub") {
+      const item = await prisma.punchItem.findUnique({ where: { id: String(form.get("punchId") ?? "") } });
+      if (!item) return json({ error: "Punch item not found." }, 404);
+      const user = session?.user?.id ? await prisma.user.findUnique({ where: { id: session.user.id } }) : null;
+      if (!user?.subcontractorId || item.subcontractorId !== user.subcontractorId) return json({ error: "Not allowed." }, 403);
+      if (item.status !== "OPEN") return json({ error: "This item is already fixed." }, 409);
+      defaultTrade = item.trade;
+      projectId = item.projectId;
+    } else {
+      const project = await prisma.project.findUnique({ where: { id: String(form.get("projectId") ?? "") } });
+      if (!project) return json({ error: "Project not found." }, 404);
+      projectId = project.id;
+    }
   } else {
     if (role !== "staff") return json({ error: "Not allowed." }, 403);
     if (kind !== "PROGRESS" && kind !== "FLOORPLAN") return json({ error: "Unknown photo type." }, 400);

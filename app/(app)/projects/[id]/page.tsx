@@ -10,7 +10,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { ChevronLeft } from "lucide-react";
 import { summarizeProject, type ProjectSummary } from "@/lib/project-summary";
 import { ReleaseRetentionButton } from "@/components/forms/release-retention-form";
-import { CATEGORY_LABELS, PROJECT_STATUS_LABELS, type ProjectStatus } from "@/lib/constants";
+import { CATEGORY_LABELS, PROJECT_STATUS_LABELS, type ProjectStatus, type PunchStatus } from "@/lib/constants";
 import { formatDate, formatDateTime, formatRM, todayInMalaysia } from "@/lib/format";
 import { reminderLink } from "@/lib/whatsapp";
 import { LoginAccess } from "@/components/portal/login-access";
@@ -36,6 +36,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
       claims: { orderBy: { number: "asc" }, include: { payments: true } },
       photos: { orderBy: { takenAt: "desc" } },
       tasks: { orderBy: { dueDate: "asc" }, include: { subcontractor: true } },
+      punchItems: { orderBy: { createdAt: "desc" }, include: { subcontractor: true } },
     },
   });
   if (!project) notFound();
@@ -213,6 +214,20 @@ export default async function ProjectPage({ params }: { params: { id: string } }
         photos={progressPhotos.map(toPhotoItem)}
         checklistCounts={checklistCounts}
         floorPlans={project.photos.filter((p) => p.kind === "FLOORPLAN").map(toPhotoItem)}
+        punch={project.punchItems.map((item) => ({
+          id: item.id,
+          location: item.location,
+          description: item.description,
+          trade: item.trade,
+          status: item.status as PunchStatus,
+          subcontractorId: item.subcontractorId,
+          subcontractorName: item.subcontractor?.name ?? null,
+          dueText: item.dueDate ? formatDate(item.dueDate, locale) : null,
+          overdue: !!item.dueDate && item.dueDate < todayInMalaysia(),
+          photoId: item.photoId,
+          resolvedPhotoId: item.resolvedPhotoId,
+          resolvedText: item.resolvedAt ? formatDateTime(item.resolvedAt, locale) : null,
+        }))}
         tasks={project.tasks.map((task) => ({
           id: task.id,
           description: task.description,

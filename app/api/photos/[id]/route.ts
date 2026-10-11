@@ -11,7 +11,7 @@ const notFound = () => new Response("Not found", { status: 404 });
  * Photos are never public. Who may see one:
  *  - staff:  any photo
  *  - client: progress photos and floor plans of projects belonging to their own client record
- *  - sub:    the photos they uploaded for their own tasks
+ *  - sub:    photos belonging to their own tasks and punch items
  * Anything else is a 404, so a guessed id reveals nothing.
  */
 export async function GET(_request: Request, { params }: { params: { id: string } }) {
@@ -19,7 +19,7 @@ export async function GET(_request: Request, { params }: { params: { id: string 
   const role = roleOf(session);
   if (!role || !session?.user) return new Response("Not signed in", { status: 401 });
 
-  const photo = await prisma.photo.findUnique({ where: { id: params.id }, include: { project: true, task: true } });
+  const photo = await prisma.photo.findUnique({ where: { id: params.id }, include: { project: true, task: true, punchIssue: true, punchFix: true } });
   if (!photo) return notFound();
 
   if (role === "client") {
@@ -28,7 +28,10 @@ export async function GET(_request: Request, { params }: { params: { id: string 
     if (!user || !visible || !photo.project.clientId || photo.project.clientId !== user.clientId) return notFound();
   } else if (role === "sub") {
     const user = session.user.id ? await prisma.user.findUnique({ where: { id: session.user.id } }) : null;
-    if (!user?.subcontractorId || photo.kind !== "TASK" || photo.task?.subcontractorId !== user.subcontractorId) return notFound();
+    const own =
+      (photo.kind === "TASK" && photo.task?.subcontractorId === user?.subcontractorId) ||
+      (photo.kind === "PUNCH" && (photo.punchIssue?.subcontractorId === user?.subcontractorId || photo.punchFix?.subcontractorId === user?.subcontractorId));
+    if (!user?.subcontractorId || !own) return notFound();
   }
 
   let bytes: Uint8Array;

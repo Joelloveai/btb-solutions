@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   CHANGE_ORDER_STATUSES,
   COST_CATEGORIES,
+  PHOTO_TRADES,
   PROJECT_STATUSES,
   QUOTE_STATUSES,
 } from "./constants";
@@ -149,3 +150,12 @@ export const loginUserSchema = z.object({
 
 export type TaskInput = z.infer<typeof taskSchema>;
 export type LoginUserInput = z.infer<typeof loginUserSchema>;
+
+export const punchSchema = z.object({
+  location: z.string().trim().min(1, "Where is it? e.g. Level 3, Unit 12, Master Bath").max(200),
+  description: z.string().trim().min(1, "Describe what needs fixing").max(300),
+  trade: z.enum(PHOTO_TRADES),
+  subcontractorId: z.string().optional().or(z.literal("")),
+  dueDate: dateString.optional().or(z.literal("")),
+});
+export type PunchInput = z.infer<typeof punchSchema>;

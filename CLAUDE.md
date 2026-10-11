@@ -17,3 +17,5 @@ Offline: a hand-written service worker (`public/sw.js`, runs in production build
 
 Photo evidence: each Photo keeps `capturedAt` (the phone's clock, range-checked server-side), GPS, `trade`/`phase` tags (lists in `lib/constants.ts`), a `location` note, an optional `checklistItem` for the "before cover" list, and a `sha256` taken on arrival. `createdAt` is always the server's arrival time, so a late upload is visible, not hidden. `/api/projects/[id]/evidence` builds the staff-only ZIP. Clients never see GPS.
 
+Punch list: `PunchItem` goes OPEN -> DONE (the assigned subcontractor, `resolvePunchItem`, with a fix photo) -> CLOSED (`closePunchItem`, contractor only). Its photos are `Photo.kind = "PUNCH"`: staff see all, a subcontractor sees only their own items', clients none. Raising and fixing items are queueable offline (`createPunch`, `resolvePunch`). The walk sheet is `/projects/[id]/punch/print`.
+

@@ -6,6 +6,8 @@ const actions = vi.hoisted(() => ({
   addPayment: vi.fn(),
   createTask: vi.fn(),
   completeTask: vi.fn(),
+  createPunchItem: vi.fn(),
+  resolvePunchItem: vi.fn(),
 }));
 vi.mock("@/app/actions", () => actions);
 
@@ -144,5 +146,29 @@ describe("executeOp", () => {
     expect(await executeOp(stored)).toEqual({ kind: "ok" });
     expect(calls).toEqual(["upload:done-12345678-p", "complete:photo123456"]);
     vi.unstubAllGlobals();
+  });
+
+  it("raises a punch item offline: photo of the defect first, then the item that points at it, with the queue id", async () => {
+    const calls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        calls.push(`upload:${(init.body as FormData).get("requestId")}:${(init.body as FormData).get("kind")}`);
+        return new Response(JSON.stringify({ id: "photoDefect01" }), { status: 201 });
+      }),
+    );
+    actions.createPunchItem.mockImplementation(async (_p: string, _i: unknown, requestId: string, photoId?: string) => (calls.push(`create:${requestId}:${photoId}`), { ok: true }));
+    await enqueue(
+      op({ id: "punch-1234567", type: "createPunch", payload: { input: { location: "L3" } }, file: { bytes: new ArrayBuffer(4), type: "image/png", name: "d.png" }, fields: { kind: "PUNCH", projectId: "p1" } }),
+    );
+    expect(await executeOp((await listOps())[0]!)).toEqual({ kind: "ok" });
+    expect(calls).toEqual(["upload:punch-1234567-p:PUNCH", "create:punch-1234567:photoDefect01"]);
+    vi.unstubAllGlobals();
+  });
+
+  it("a punch fix with no photo just resolves the item", async () => {
+    actions.resolvePunchItem.mockResolvedValue({ ok: true });
+    expect(await executeOp(op({ type: "resolvePunch", payload: { punchId: "pi1" } }))).toEqual({ kind: "ok" });
+    expect(actions.resolvePunchItem).toHaveBeenCalledWith("pi1", undefined);
   });
 });
