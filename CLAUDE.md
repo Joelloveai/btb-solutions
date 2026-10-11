@@ -21,3 +21,5 @@ Punch list: `PunchItem` goes OPEN -> DONE (the assigned subcontractor, `resolveP
 
 Documents: `Document` rows are versions. Uploading a name that already exists in the project (case and spacing ignored, `nameKey`) makes version N+1 and flips `isCurrent`; old versions are kept. Staff can open any version; a subcontractor can fetch only the CURRENT version of a Drawing, for their trade (or all trades), on a project they have a task or punch item on (`lib/document-access.ts`); clients get nothing. File types are checked by bytes (`lib/document-files.ts`) and non-image/PDF files are download-only.
 
+
+Client portal: staff use the "For Client" tab (stage, payment schedule, selections, daily log) and "Send to client" on change orders. Clients approve/reject through `decideChangeOrder` / `approveSelection`; these need connectivity on purpose (the time is the server's). The payment schedule is derived from recorded payments, never entered separately.

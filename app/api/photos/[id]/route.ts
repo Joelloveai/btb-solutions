@@ -10,7 +10,7 @@ const notFound = () => new Response("Not found", { status: 404 });
 /**
  * Photos are never public. Who may see one:
  *  - staff:  any photo
- *  - client: progress photos and floor plans of projects belonging to their own client record
+ *  - client: progress photos, floor plans and product selections of projects belonging to their own client record
  *  - sub:    photos belonging to their own tasks and punch items
  * Anything else is a 404, so a guessed id reveals nothing.
  */
@@ -24,7 +24,7 @@ export async function GET(_request: Request, { params }: { params: { id: string 
 
   if (role === "client") {
     const user = session.user.id ? await prisma.clientUser.findUnique({ where: { id: session.user.id } }) : null;
-    const visible = photo.kind === "PROGRESS" || photo.kind === "FLOORPLAN";
+    const visible = photo.kind === "PROGRESS" || photo.kind === "FLOORPLAN" || photo.kind === "SELECTION";
     if (!user || !visible || !photo.project.clientId || photo.project.clientId !== user.clientId) return notFound();
   } else if (role === "sub") {
     const user = session.user.id ? await prisma.user.findUnique({ where: { id: session.user.id } }) : null;

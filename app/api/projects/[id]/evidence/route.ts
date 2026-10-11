@@ -45,7 +45,7 @@ export async function GET(_request: Request, { params }: { params: { id: string 
   for (const photo of project.photos) {
     const taken = photo.capturedAt ?? photo.takenAt;
     const folder =
-      photo.kind === "FLOORPLAN" ? "floor-plans" : photo.kind === "TASK" ? `task-photos/${safe(photo.trade ?? "No trade")}` : photo.kind === "PUNCH" ? `punch-photos/${safe(photo.trade ?? "No trade")}` : `photos/${safe(photo.phase ?? "No phase")}/${safe(photo.trade ?? "No trade")}`;
+      photo.kind === "FLOORPLAN" ? "floor-plans" : photo.kind === "TASK" ? `task-photos/${safe(photo.trade ?? "No trade")}` : photo.kind === "PUNCH" ? `punch-photos/${safe(photo.trade ?? "No trade")}` : photo.kind === "SELECTION" ? "selections" : `photos/${safe(photo.phase ?? "No phase")}/${safe(photo.trade ?? "No trade")}`;
     const file = `${folder}/${stamp(taken)}_${photo.id}.${EXT[photo.mimeType] ?? "bin"}`;
     try {
       zip.file(file, await readPhotoFile(photo), { binary: true });

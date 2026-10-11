@@ -85,3 +85,9 @@ export const PUNCH_STATUS_LABELS: Record<PunchStatus, string> = {
 
 export const DOCUMENT_TYPES = ["Drawing", "Specification", "Contract", "Other"] as const;
 export type DocumentType = (typeof DOCUMENT_TYPES)[number];
+
+/** The five stages the client sees on their timeline. */
+export const PROJECT_STAGES = ["Demo", "Framing", "Rough-in", "Finishing", "Completed"] as const;
+export type ProjectStage = (typeof PROJECT_STAGES)[number];
+
+export const SELECTION_CATEGORIES = ["Tiles", "Paint", "Fixtures", "Appliances", "Flooring", "Other"] as const;

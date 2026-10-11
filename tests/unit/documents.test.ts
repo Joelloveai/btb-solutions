@@ -73,3 +73,31 @@ describe("dailySummary", () => {
     expect(dailySummary(tasks, punch, now, today)).toEqual({ newTasks: 1, dueTomorrow: 2, overdue: 1, newPunch: 1 });
   });
 });
+
+import { buildPaymentSchedule } from "@/lib/payment-schedule";
+
+describe("buildPaymentSchedule", () => {
+  const today = new Date("2026-10-11T00:00:00.000Z");
+  const plan = [
+    { id: "a", label: "Deposit", percent: "10", dueDate: new Date("2026-09-01T00:00:00.000Z") },
+    { id: "b", label: "Framing", percent: "30", dueDate: new Date("2026-10-01T00:00:00.000Z") },
+    { id: "c", label: "Handover", percent: "60", dueDate: new Date("2026-12-01T00:00:00.000Z") },
+  ];
+  it("works out amounts from the total, and fills instalments in order from money received", () => {
+    const r = buildPaymentSchedule(plan, "100000", "15000", today);
+    expect(r.map((m) => m.amount)).toEqual([10000, 30000, 60000]);
+    expect(r.map((m) => m.status)).toEqual(["PAID", "PART_PAID", "OUTSTANDING"]);
+    expect(r[1]).toMatchObject({ paid: 5000 });
+  });
+  it("flags only unpaid instalments as overdue", () => {
+    const r = buildPaymentSchedule(plan, "100000", "15000", today);
+    expect(r.map((m) => m.overdue)).toEqual([false, true, false]); // deposit paid; framing due 1 Oct and unpaid; handover not yet due
+  });
+  it("is exact with decimals", () => {
+    const r = buildPaymentSchedule([{ id: "x", label: "One", percent: "33.33", dueDate: null }], "1000.10", "0", today);
+    expect(r[0]!.amount).toBe(333.33);
+  });
+  it("pays everything off when more is received than the total", () => {
+    expect(buildPaymentSchedule(plan, "100000", "150000", today).every((m) => m.status === "PAID")).toBe(true);
+  });
+});

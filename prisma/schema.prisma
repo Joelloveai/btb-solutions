@@ -20,31 +20,36 @@ model User {
 }
 
 model Project {
-  id                String        @id @default(cuid())
+  id                String             @id @default(cuid())
   name              String
   clientName        String?
   contractValue     Decimal
   startDate         DateTime?
-  status            String        @default("ACTIVE")
-  sstEnabled        Boolean       @default(false)
-  sstRate           Decimal       @default(6.00)
-  lastClaimNumber   Int           @default(0)
-  retentionPercent  Decimal       @default(5.00)
-  retentionReleased Decimal       @default(0)
+  status            String             @default("ACTIVE")
+  sstEnabled        Boolean            @default(false)
+  sstRate           Decimal            @default(6.00)
+  lastClaimNumber   Int                @default(0)
+  retentionPercent  Decimal            @default(5.00)
+  retentionReleased Decimal            @default(0)
   costs             CostEntry[]
   payments          Payment[]
   changeOrders      ChangeOrder[]
   boqLines          BoqLine[]
   claims            Claim[]
   quote             Quote?
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
-  Client            Client?       @relation(fields: [clientId], references: [id])
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  Client            Client?            @relation(fields: [clientId], references: [id])
   clientId          String?
   photos            Photo[]
   tasks             Task[]
   punchItems        PunchItem[]
   documents         Document[]
+  /// One of PROJECT_STAGES (lib/constants.ts): shown to the client as the current stage of the job.
+  stage             String?
+  selections        Selection[]
+  dailyLogs         DailyLog[]
+  paymentMilestones PaymentMilestone[]
 }
 
 model CostEntry {
@@ -83,17 +88,23 @@ model Payment {
 }
 
 model ChangeOrder {
-  id          String    @id @default(cuid())
-  projectId   String
-  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  date        DateTime
-  description String
-  amount      Decimal
-  status      String    @default("PENDING")
-  approvedAt  DateTime?
-  boqLineId   String?
-  boqLine     BoqLine?  @relation(fields: [boqLineId], references: [id], onDelete: SetNull)
-  createdAt   DateTime  @default(now())
+  id                String    @id @default(cuid())
+  projectId         String
+  project           Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  date              DateTime
+  description       String
+  amount            Decimal
+  status            String    @default("PENDING")
+  approvedAt        DateTime?
+  boqLineId         String?
+  boqLine           BoqLine?  @relation(fields: [boqLineId], references: [id], onDelete: SetNull)
+  createdAt         DateTime  @default(now())
+  /// When staff sent this change order to the client's portal for approval. Clients see only sent ones.
+  sentToClientAt    DateTime?
+  /// "APPROVED" or "REJECTED", as decided by the client in the portal. The time is the SERVER clock.
+  clientDecision    String?
+  clientDecidedAt   DateTime?
+  clientDecidedById String?
 }
 
 /// One line of a project's bill of quantities: Qty x Rate = Amount.
@@ -214,6 +225,7 @@ model Photo {
   task            Task?
   punchIssue      PunchItem? @relation("PunchIssuePhoto")
   punchFix        PunchItem? @relation("PunchFixPhoto")
+  selection       Selection?
   createdAt       DateTime   @default(now())
   /// Evidence metadata. capturedAt is the DEVICE clock when the photo was taken; createdAt is the server clock when it arrived.
   capturedAt      DateTime?
@@ -312,4 +324,52 @@ model Document {
 
   @@unique([projectId, nameKey, version])
   @@index([projectId, isCurrent])
+}
+
+/// A product choice (tiles, paint, fixtures) the client is asked to approve in their portal.
+model Selection {
+  id              String    @id @default(cuid())
+  projectId       String
+  project         Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  /// e.g. Tiles, Paint, Fixtures, Appliances
+  category        String
+  name            String
+  details         String?
+  photoId         String?   @unique
+  photo           Photo?    @relation(fields: [photoId], references: [id], onDelete: SetNull)
+  /// PENDING until the client approves it.
+  status          String    @default("PENDING")
+  /// Server clock.
+  approvedAt      DateTime?
+  approvedById    String?
+  createdAt       DateTime  @default(now())
+  clientRequestId String?   @unique
+}
+
+/// A day's note for the client, shown with the photos taken that day.
+model DailyLog {
+  id              String   @id @default(cuid())
+  projectId       String
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  /// The calendar day the note is about (held at UTC midnight).
+  date            DateTime
+  note            String
+  createdAt       DateTime @default(now())
+  clientRequestId String?  @unique
+
+  @@index([projectId, date])
+}
+
+/// One instalment of the client's payment schedule, e.g. "Deposit" 10%.
+/// Whether it is paid is worked out from the project's recorded payments, never entered twice.
+model PaymentMilestone {
+  id        String    @id @default(cuid())
+  projectId String
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  position  Int
+  label     String
+  /// Share of the total the client is billed (contract + approved variations + SST).
+  percent   Decimal
+  dueDate   DateTime?
+  createdAt DateTime  @default(now())
 }

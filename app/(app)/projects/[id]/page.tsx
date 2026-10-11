@@ -12,6 +12,7 @@ import { summarizeProject, type ProjectSummary } from "@/lib/project-summary";
 import { ReleaseRetentionButton } from "@/components/forms/release-retention-form";
 import { CATEGORY_LABELS, PROJECT_STATUS_LABELS, type ProjectStatus, type PunchStatus } from "@/lib/constants";
 import { formatDate, formatDateTime, formatRM, todayInMalaysia } from "@/lib/format";
+import { buildPaymentSchedule } from "@/lib/payment-schedule";
 import { reminderLink } from "@/lib/whatsapp";
 import { LoginAccess } from "@/components/portal/login-access";
 import { OfflineSnapshot } from "@/components/offline/offline-snapshot";
@@ -38,6 +39,9 @@ export default async function ProjectPage({ params }: { params: { id: string } }
       tasks: { orderBy: { dueDate: "asc" }, include: { subcontractor: true } },
       punchItems: { orderBy: { createdAt: "desc" }, include: { subcontractor: true } },
       documents: { orderBy: [{ nameKey: "asc" }, { version: "desc" }] },
+      selections: { orderBy: { createdAt: "asc" } },
+      dailyLogs: { orderBy: [{ date: "desc" }, { createdAt: "desc" }] },
+      paymentMilestones: { orderBy: { position: "asc" } },
     },
   });
   if (!project) notFound();
@@ -80,6 +84,14 @@ export default async function ProjectPage({ params }: { params: { id: string } }
   };
   // "Latest Drawings": a current drawing uploaded within the last week, so people know to look.
   const hasLatestDrawings = project.documents.some((d) => d.isCurrent && d.type === "Drawing" && Date.now() - d.uploadedAt.getTime() < 7 * 24 * 60 * 60 * 1000);
+  // The client's payment schedule, worked out from the payments already recorded (nothing is entered twice).
+  const receivedTotal = project.payments.reduce((t, p) => t.plus(p.amount), new Prisma.Decimal(0));
+  const schedule = buildPaymentSchedule(
+    project.paymentMilestones.map((m) => ({ id: m.id, label: m.label, percent: m.percent, dueDate: m.dueDate })),
+    totals.billableTotal,
+    receivedTotal,
+    todayInMalaysia(),
+  );
   const progressPhotos = project.photos.filter((p) => p.kind === "PROGRESS");
   const checklistCounts: Record<string, number> = {};
   for (const photo of progressPhotos) if (photo.checklistItem) checklistCounts[photo.checklistItem] = (checklistCounts[photo.checklistItem] ?? 0) + 1;
@@ -236,6 +248,30 @@ export default async function ProjectPage({ params }: { params: { id: string } }
           uploadedAtText: formatDateTime(d.uploadedAt, locale),
           uploadedAtMs: d.uploadedAt.getTime(),
         }))}
+        clientView={{
+          projectId: project.id,
+          hasClient: !!project.clientId,
+          stage: project.stage ?? "",
+          milestones: schedule.map((m) => ({
+            id: m.id,
+            label: m.label,
+            percent: m.percent,
+            amountText: money(m.amount),
+            paidText: money(m.paid),
+            status: m.status,
+            overdue: m.overdue,
+            dueText: m.dueDate ? formatDate(m.dueDate, locale) : null,
+          })),
+          selections: project.selections.map((x) => ({
+            id: x.id,
+            category: x.category,
+            name: x.name,
+            details: x.details,
+            photoId: x.photoId,
+            approvedText: x.approvedAt ? formatDateTime(x.approvedAt, locale) : null,
+          })),
+          logs: project.dailyLogs.map((l) => ({ id: l.id, dateText: formatDate(l.date, locale), note: l.note })),
+        }}
         punch={project.punchItems.map((item) => ({
           id: item.id,
           location: item.location,
@@ -305,6 +341,9 @@ export default async function ProjectPage({ params }: { params: { id: string } }
           status: c.status,
           boqLineId: c.boqLineId,
           boqLabel: boqLabel(c.boqLineId),
+          sentText: c.sentToClientAt ? formatDateTime(c.sentToClientAt, locale) : null,
+          clientDecisionText: c.clientDecision && c.clientDecidedAt ? `${c.clientDecision === "APPROVED" ? "Approved" : "Rejected"} by client ${formatDateTime(c.clientDecidedAt, locale)}` : null,
+          canSend: !!project.clientId && c.status === "PENDING" && !c.sentToClientAt,
         }))}
       />
     </>

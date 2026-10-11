@@ -4,6 +4,7 @@ import {
   COST_CATEGORIES,
   PHOTO_TRADES,
   PROJECT_STATUSES,
+  SELECTION_CATEGORIES,
   QUOTE_STATUSES,
 } from "./constants";
 
@@ -159,3 +160,27 @@ export const punchSchema = z.object({
   dueDate: dateString.optional().or(z.literal("")),
 });
 export type PunchInput = z.infer<typeof punchSchema>;
+
+export const selectionSchema = z.object({
+  category: z.enum(SELECTION_CATEGORIES),
+  name: z.string().trim().min(1, "Name the product, e.g. Grey matt tile 600x600").max(120),
+  details: z.string().trim().max(300).optional().or(z.literal("")),
+});
+export type SelectionInput = z.infer<typeof selectionSchema>;
+
+export const dailyLogSchema = z.object({
+  date: dateString,
+  note: z.string().trim().min(1, "Write what happened on site").max(600),
+});
+export type DailyLogInput = z.infer<typeof dailyLogSchema>;
+
+export const milestoneSchema = z.object({
+  label: z.string().trim().min(1, "Name the instalment, e.g. Deposit").max(80),
+  percent: z
+    .string()
+    .trim()
+    .regex(/^\d{1,3}(\.\d{1,2})?$/, "Enter a percentage like 10 or 12.5")
+    .refine((v) => Number(v) > 0 && Number(v) <= 100, "Must be more than 0 and at most 100"),
+  dueDate: dateString.optional().or(z.literal("")),
+});
+export type MilestoneInput = z.infer<typeof milestoneSchema>;

@@ -3,10 +3,11 @@
 import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import bcrypt from "bcryptjs";
-import { requireSession, requireSub } from "@/lib/auth";
+import { requireClient, requireSession, requireSub } from "@/lib/auth";
 import { deleteDocumentFile } from "@/lib/document-storage";
 import { deletePhotoFile } from "@/lib/photos";
 import { computeClaim } from "@/lib/claims";
+import { PROJECT_STAGES } from "@/lib/constants";
 import { isLocale } from "@/lib/i18n";
 import { prisma } from "@/lib/prisma";
 import { calculateQuote } from "@/lib/quotes";
@@ -14,8 +15,11 @@ import {
   boqLineSchema,
   changeOrderSchema,
   claimSchema,
+  dailyLogSchema,
   loginUserSchema,
+  milestoneSchema,
   punchSchema,
+  selectionSchema,
   taskSchema,
   clientSchema,
   paidDateSchema,
@@ -1009,6 +1013,183 @@ export async function deleteDocumentVersion(id: string): Promise<ActionResult> {
       }
     });
     await deleteDocumentFile(doc).catch(() => undefined);
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Client portal: what staff prepare for the client
+// ---------------------------------------------------------------------------
+
+/** Put a pending change order in front of the client for their decision. Clients never see drafts. */
+export async function sendChangeOrderToClient(id: string): Promise<ActionResult> {
+  try {
+    await requireSession();
+    const order = await prisma.changeOrder.findUnique({ where: { id }, include: { project: true } });
+    if (!order) return { ok: false, error: "Change order not found." };
+    if (!order.project.clientId) return { ok: false, error: "Link this project to a client first." };
+    if (order.status !== "PENDING") return { ok: false, error: "Only a pending change order can be sent for approval." };
+    await prisma.changeOrder.update({ where: { id }, data: { sentToClientAt: order.sentToClientAt ?? new Date() } });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+export async function setProjectStage(projectId: string, stage: string): Promise<ActionResult> {
+  try {
+    await requireSession();
+    if (stage !== "" && !(PROJECT_STAGES as readonly string[]).includes(stage)) return { ok: false, error: "Unknown stage." };
+    await prisma.project.update({ where: { id: projectId }, data: { stage: stage || null } });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+export async function createSelection(projectId: string, input: unknown, requestId?: string, photoId?: string): Promise<ActionResult> {
+  const rid = requestIdOf(requestId);
+  try {
+    await requireSession();
+    const parsed = selectionSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+    const v = parsed.data;
+    if (photoId) {
+      const photo = await prisma.photo.findUnique({ where: { id: photoId }, include: { selection: true } });
+      if (!photo || photo.kind !== "SELECTION" || photo.projectId !== projectId || photo.selection) return { ok: false, error: "That photo cannot be attached." };
+    }
+    await prisma.selection.create({
+      data: { projectId, category: v.category, name: v.name, details: orNull(v.details), photoId: photoId || null, clientRequestId: rid },
+    });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    if (alreadyApplied(error, rid)) return { ok: true };
+    return failure(error);
+  }
+}
+
+export async function deleteSelection(id: string): Promise<ActionResult> {
+  try {
+    await requireSession();
+    const item = await prisma.selection.findUnique({ where: { id } });
+    await prisma.selection.delete({ where: { id } });
+    if (item?.photoId) {
+      const photo = await prisma.photo.findUnique({ where: { id: item.photoId } });
+      if (photo) {
+        await prisma.photo.delete({ where: { id: photo.id } }).catch(() => undefined);
+        await deletePhotoFile(photo).catch(() => undefined);
+      }
+    }
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+export async function createDailyLog(projectId: string, input: unknown, requestId?: string): Promise<ActionResult> {
+  const rid = requestIdOf(requestId);
+  try {
+    await requireSession();
+    const parsed = dailyLogSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+    await prisma.dailyLog.create({ data: { projectId, date: toDate(parsed.data.date), note: parsed.data.note, clientRequestId: rid } });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    if (alreadyApplied(error, rid)) return { ok: true };
+    return failure(error);
+  }
+}
+
+export async function deleteDailyLog(id: string): Promise<ActionResult> {
+  try {
+    await requireSession();
+    await prisma.dailyLog.delete({ where: { id } });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+export async function createPaymentMilestone(projectId: string, input: unknown): Promise<ActionResult> {
+  try {
+    await requireSession();
+    const parsed = milestoneSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+    const v = parsed.data;
+    const last = await prisma.paymentMilestone.aggregate({ where: { projectId }, _max: { position: true } });
+    await prisma.paymentMilestone.create({
+      data: { projectId, label: v.label, percent: v.percent, dueDate: v.dueDate ? toDate(v.dueDate) : null, position: (last._max.position ?? -1) + 1 },
+    });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+export async function deletePaymentMilestone(id: string): Promise<ActionResult> {
+  try {
+    await requireSession();
+    await prisma.paymentMilestone.delete({ where: { id } });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Client portal: decisions made by the client (server clock, recorded with who decided)
+// ---------------------------------------------------------------------------
+
+/**
+ * The client approves or rejects a change order that staff sent them. The time is taken from the SERVER
+ * and the decision is tied to the signed-in client user, so it cannot be back-dated or made for someone else.
+ * Approving also makes the change order count toward the contract, exactly as if staff had approved it.
+ */
+export async function decideChangeOrder(id: string, decision: unknown): Promise<ActionResult> {
+  try {
+    const { clientUser, clientId } = await requireClient();
+    if (decision !== "APPROVED" && decision !== "REJECTED") return { ok: false, error: "Unknown decision." };
+    const order = await prisma.changeOrder.findUnique({ where: { id }, include: { project: true } });
+    // Another client's change order (or one that was never sent) is simply not found.
+    if (!order || order.project.clientId !== clientId || !order.sentToClientAt) return { ok: false, error: "Change order not found." };
+    if (order.clientDecision) return order.clientDecision === decision ? { ok: true } : { ok: false, error: "This change order has already been decided." };
+    if (order.status !== "PENDING") return { ok: false, error: "This change order has already been decided by the contractor." };
+    const now = new Date();
+    await prisma.changeOrder.update({
+      where: { id },
+      data: {
+        clientDecision: decision,
+        clientDecidedAt: now,
+        clientDecidedById: clientUser.id,
+        status: decision,
+        approvedAt: decision === "APPROVED" ? now : null,
+      },
+    });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+export async function approveSelection(id: string): Promise<ActionResult> {
+  try {
+    const { clientUser, clientId } = await requireClient();
+    const item = await prisma.selection.findUnique({ where: { id }, include: { project: true } });
+    if (!item || item.project.clientId !== clientId) return { ok: false, error: "Selection not found." };
+    if (item.status === "APPROVED") return { ok: true };
+    await prisma.selection.update({ where: { id }, data: { status: "APPROVED", approvedAt: new Date(), approvedById: clientUser.id } });
     revalidateAll();
     return { ok: true };
   } catch (error) {

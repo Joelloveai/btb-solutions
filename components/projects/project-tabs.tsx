@@ -8,6 +8,7 @@ import {
   deleteChangeOrder,
   deleteCost,
   deletePayment,
+  sendChangeOrderToClient,
   setChangeOrderStatus,
 } from "@/app/actions";
 import { EditChangeOrderButton } from "@/components/forms/add-change-order-form";
@@ -15,6 +16,7 @@ import { EditCostButton } from "@/components/forms/add-cost-form";
 import { EditPaymentButton } from "@/components/forms/add-payment-form";
 import { AddBoqLineForm, EditBoqLineButton } from "@/components/forms/boq-line-form";
 import { DeleteIconButton } from "@/components/forms/row-actions";
+import { useSubmit } from "@/components/forms/use-submit";
 import { MarkPaidButton } from "@/components/subcons/mark-paid-button";
 import type { Lookups } from "./lookups";
 import { PendingOps } from "@/components/offline/pending-ops";
@@ -24,6 +26,8 @@ import { BEFORE_COVER_ITEMS } from "@/lib/constants";
 import { Download } from "lucide-react";
 import { PhotoGallery, type PhotoItem } from "@/components/photos/photo-gallery";
 import { PhotoUpload } from "@/components/photos/photo-upload";
+import type { ComponentProps } from "react";
+import { ClientViewPanel } from "@/components/client-view/client-view-panel";
 import { DocumentsPanel, type DocRow } from "@/components/documents/documents-panel";
 import { PunchPanel, type PunchRow } from "@/components/punch/punch-panel";
 import { TasksPanel, type TaskRow } from "@/components/tasks/tasks-panel";
@@ -74,6 +78,10 @@ export type ChangeOrderRow = {
   status: string;
   boqLineId: string | null;
   boqLabel: string | null;
+  /** Client approval: when it was sent, and what the client decided (server time). */
+  sentText: string | null;
+  clientDecisionText: string | null;
+  canSend: boolean;
 };
 export type BoqRow = {
   id: string;
@@ -97,6 +105,7 @@ const TABS = [
   { id: "tasks", label: "Tasks" },
   { id: "punch", label: "Punch List" },
   { id: "documents", label: "Documents" },
+  { id: "client", label: "For Client" },
 ] as const;
 
 const tone = { PENDING: "yellow", APPROVED: "green", REJECTED: "red" } as const;
@@ -115,6 +124,7 @@ export function ProjectTabs({
   tasks,
   punch,
   documents,
+  clientView,
 }: {
   projectId: string;
   costs: CostRow[];
@@ -131,6 +141,7 @@ export function ProjectTabs({
   tasks: TaskRow[];
   punch: PunchRow[];
   documents: DocRow[];
+  clientView: ComponentProps<typeof ClientViewPanel>;
 }) {
   const t = useT();
   const openPunch = punch.filter((p) => p.status !== "CLOSED").length;
@@ -191,6 +202,9 @@ export function ProjectTabs({
           </section>
         </div>
       </TabsContent>
+      <TabsContent value="client">
+        <ClientViewPanel {...clientView} />
+      </TabsContent>
       <TabsContent value="documents">
         <PendingOps projectId={projectId} types={["uploadDocument"]} />
         <DocumentsPanel projectId={projectId} docs={documents} />
@@ -204,6 +218,15 @@ export function ProjectTabs({
         <TasksPanel projectId={projectId} rows={tasks} lookups={lookups} />
       </TabsContent>
     </Tabs>
+  );
+}
+
+function SendToClientButton({ id }: { id: string }) {
+  const { pending, submit } = useSubmit("Sent to the client for approval", () => undefined);
+  return (
+    <Button small variant="accent" disabled={pending} onClick={() => submit(() => sendChangeOrderToClient(id))}>
+      Send to client
+    </Button>
   );
 }
 
@@ -426,8 +449,14 @@ function ChangeOrdersPanel({ projectId, rows, lookups }: { projectId: string; ro
                   <td className={mAmount}>{formatRM(row.amount)}</td>
                   <td className={mSubRight}>
                     <Badge tone={tone[status] ?? "gray"}>{CHANGE_ORDER_LABELS[status] ?? row.status}</Badge>
+                    {row.clientDecisionText ? (
+                      <span className="mt-1 block text-xs text-muted-foreground" data-testid="client-decision">{row.clientDecisionText}</span>
+                    ) : row.sentText ? (
+                      <span className="mt-1 block text-xs text-muted-foreground">Sent to client {row.sentText}</span>
+                    ) : null}
                     {status === "PENDING" ? (
-                      <div className="mt-2 flex gap-2">
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {row.canSend ? <SendToClientButton id={row.id} /> : null}
                         <Button small disabled={pending} onClick={() => update(row.id, "APPROVED")}>
                           Approve
                         </Button>

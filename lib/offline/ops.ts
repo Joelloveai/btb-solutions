@@ -1,4 +1,4 @@
-import { addCost, addPayment, completeTask, createPunchItem, createTask, resolvePunchItem, type ActionResult } from "@/app/actions";
+import { addCost, addPayment, completeTask, createDailyLog, createPunchItem, createSelection, createTask, resolvePunchItem, type ActionResult } from "@/app/actions";
 import { updateOp } from "./outbox";
 import type { OutboxOp } from "./db";
 
@@ -84,6 +84,18 @@ export async function executeOp(op: OutboxOp): Promise<ExecResult> {
       case "uploadDocument": {
         const uploaded = await withTimeout(uploadFile(op, op.id, "/api/documents"), 120_000);
         return "id" in uploaded ? { kind: "ok" } : uploaded;
+      }
+      case "createDailyLog":
+        return fromAction(await withTimeout(createDailyLog(op.projectId as string, op.payload.input, op.id)));
+      case "createSelection": {
+        let photoId = typeof op.payload.photoId === "string" ? op.payload.photoId : undefined;
+        if (op.file && !photoId) {
+          const uploaded = await withTimeout(uploadFile(op, `${op.id}-p`));
+          if (!("id" in uploaded)) return uploaded;
+          photoId = uploaded.id;
+          await updateOp(op.id, { payload: { ...op.payload, photoId } });
+        }
+        return fromAction(await withTimeout(createSelection(op.projectId as string, op.payload.input, op.id, photoId)));
       }
       case "createPunch": {
         // The photo of the defect goes up first (and is remembered), then the item that points at it.

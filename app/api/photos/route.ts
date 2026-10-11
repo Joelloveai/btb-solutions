@@ -81,7 +81,7 @@ export async function POST(request: Request) {
     }
   } else {
     if (role !== "staff") return json({ error: "Not allowed." }, 403);
-    if (kind !== "PROGRESS" && kind !== "FLOORPLAN") return json({ error: "Unknown photo type." }, 400);
+    if (kind !== "PROGRESS" && kind !== "FLOORPLAN" && kind !== "SELECTION") return json({ error: "Unknown photo type." }, 400);
     const project = await prisma.project.findUnique({ where: { id: String(form.get("projectId") ?? "") } });
     if (!project) return json({ error: "Project not found." }, 404);
     projectId = project.id;
