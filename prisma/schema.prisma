@@ -13,6 +13,8 @@ model User {
   passwordHash    String
   name            String?
   locale          String         @default("en")
+  /// Subcontractors sign in with phone + PIN. Digits only, international form (60123456789). Unique across users.
+  phone           String?        @unique
   /// Set for a subcontractor's task-log login; staff users leave it empty.
   subcontractorId String?
   subcontractor   Subcontractor? @relation(fields: [subcontractorId], references: [id], onDelete: SetNull)
@@ -158,6 +160,7 @@ model Subcontractor {
   tasks      Task[]
   punchItems PunchItem[]
   createdAt  DateTime    @default(now())
+  invites    SubInvite[]
 }
 
 model Quote {
@@ -458,4 +461,25 @@ model EvidencePack {
   createdAt   DateTime @default(now())
 
   @@index([projectId, createdAt])
+}
+
+/// A one-time link a contractor sends by WhatsApp so a subcontractor can set up their own login.
+/// Only the SHA-256 of the token is stored, so the database alone cannot be used to sign anyone up.
+model SubInvite {
+  id              String        @id @default(cuid())
+  tokenHash       String        @unique
+  subcontractorId String
+  subcontractor   Subcontractor @relation(fields: [subcontractorId], references: [id], onDelete: Cascade)
+  phone           String
+  createdAt       DateTime      @default(now())
+  expiresAt       DateTime
+  usedAt          DateTime?
+}
+
+/// Failed phone+PIN attempts: five in 15 minutes locks that phone number for 15 minutes.
+model PinThrottle {
+  phone       String    @id
+  failures    Int       @default(0)
+  windowStart DateTime
+  lockedUntil DateTime?
 }

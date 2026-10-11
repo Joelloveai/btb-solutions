@@ -1,7 +1,10 @@
 "use server";
 
 import { Prisma } from "@prisma/client";
+import { z } from "zod";
+import { clearPinFailures } from "@/lib/pin-throttle";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import bcrypt from "bcryptjs";
 import { requireClient, requireSession, requireSub } from "@/lib/auth";
 import { deletePhotoFile } from "@/lib/photos";
@@ -9,6 +12,7 @@ import { computeClaim } from "@/lib/claims";
 import { PROJECT_STAGES } from "@/lib/constants";
 import { isLocale } from "@/lib/i18n";
 import { prisma } from "@/lib/prisma";
+import { whatsappNumber } from "@/lib/whatsapp";
 import { createHash, randomBytes } from "node:crypto";
 import { saveDocumentFile, deleteDocumentFile } from "@/lib/document-storage";
 import { buildDiaryPdf, decodeSignature, diaryContentHash, newPdfKey, pdfIdFromKey, signatureHash } from "@/lib/site-diary";
@@ -1708,6 +1712,92 @@ export async function countersignSiteDiary(id: string, signature: string): Promi
     return { ok: true };
   } catch (error) {
     if (saved) await deleteDocumentFile(saved).catch(() => undefined);
+    return failure(error);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Subcontractor invite + PIN accounts (this contractor's subcontractors only)
+// ---------------------------------------------------------------------------
+
+const INVITE_DAYS = 7;
+const tokenHash = (token: string) => createHash("sha256").update(token).digest("hex");
+
+/**
+ * Staff taps "Invite to app" on a subcontractor. Returns the join link and a wa.me link that opens WhatsApp
+ * with the message ready to send. Nothing is sent from the server and nothing costs money.
+ */
+export async function createSubInvite(subcontractorId: string): Promise<ActionResult<{ url: string; whatsappUrl: string; phone: string }>> {
+  try {
+    await requireSession();
+    const sub = await prisma.subcontractor.findUnique({ where: { id: subcontractorId } });
+    if (!sub) return { ok: false, error: "Subcontractor not found." };
+    const phone = whatsappNumber(sub.contact);
+    if (!phone) return { ok: false, error: "Add this subcontractor's phone number first (in Edit, under Contact)." };
+    if (await prisma.user.findUnique({ where: { phone } })) return { ok: false, error: "This phone number already has a login." };
+
+    const token = randomBytes(24).toString("hex");
+    const now = new Date();
+    await prisma.$transaction([
+      // A new link replaces any earlier unused one for this person.
+      prisma.subInvite.updateMany({ where: { subcontractorId, usedAt: null, expiresAt: { gt: now } }, data: { expiresAt: now } }),
+      prisma.subInvite.create({ data: { tokenHash: tokenHash(token), subcontractorId, phone, expiresAt: new Date(now.getTime() + INVITE_DAYS * 86_400_000) } }),
+    ]);
+    const h = headers();
+    const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
+    const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
+    const url = `${process.env.APP_URL ?? `${proto}://${host}`}/join/${token}`;
+    const message = `Hi ${sub.name}, BTB Builders has set you up on the BTB app. Open this link, pick a 6-digit PIN, and you can see your tasks and what you are owed: ${url}`;
+    return { ok: true, data: { url, phone, whatsappUrl: `https://wa.me/${phone}?text=${encodeURIComponent(message)}` } };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+const pinSchema = z
+  .object({
+    name: z.string().trim().min(1, "Enter your name").max(80),
+    trade: z.string().trim().max(60).optional().or(z.literal("")),
+    pin: z.string().regex(/^\d{6}$/, "The PIN must be exactly 6 digits"),
+    pin2: z.string(),
+  })
+  .refine((v) => v.pin === v.pin2, { message: "The two PINs do not match", path: ["pin2"] });
+
+/** Looks up a usable invite for the join page. Returns what the form needs to pre-fill, or null. */
+export async function findSubInvite(token: string) {
+  if (!/^[a-f0-9]{48}$/.test(token)) return null;
+  const invite = await prisma.subInvite.findUnique({ where: { tokenHash: tokenHash(token) }, include: { subcontractor: true } });
+  if (!invite || invite.usedAt || invite.expiresAt <= new Date()) return null;
+  return { name: invite.subcontractor.name, trade: invite.subcontractor.trade ?? "", phone: invite.phone };
+}
+
+/**
+ * The subcontractor opens the invite link and chooses a PIN. Their phone number (from the invite) and
+ * this PIN become their login. No email, no password. The link works once.
+ */
+export async function acceptSubInvite(token: string, input: unknown): Promise<ActionResult<{ phone: string }>> {
+  try {
+    if (!/^[a-f0-9]{48}$/.test(token)) return { ok: false, error: "This invite link is not valid." };
+    const parsed = pinSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+    const v = parsed.data;
+    const invite = await prisma.subInvite.findUnique({ where: { tokenHash: tokenHash(token) } });
+    if (!invite || invite.usedAt || invite.expiresAt <= new Date()) return { ok: false, error: "This invite link has expired or was already used. Ask BTB Builders for a new one." };
+    const passwordHash = await bcrypt.hash(v.pin, 10);
+    await prisma.$transaction(async (tx) => {
+      // Claim the invite first: a second tap (or a second phone) finds it already used.
+      const claimed = await tx.subInvite.updateMany({ where: { id: invite.id, usedAt: null }, data: { usedAt: new Date() } });
+      if (claimed.count === 0) throw new Error("invite: used");
+      await tx.subcontractor.update({ where: { id: invite.subcontractorId }, data: { name: v.name, trade: orNull(v.trade) } });
+      await tx.user.create({
+        data: { email: `sub-${invite.phone}@pin.btb.invalid`, phone: invite.phone, name: v.name, passwordHash, subcontractorId: invite.subcontractorId },
+      });
+    });
+    await clearPinFailures(invite.phone);
+    return { ok: true, data: { phone: invite.phone } };
+  } catch (error) {
+    if (error instanceof Error && error.message === "invite: used") return { ok: false, error: "This invite link was already used." };
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return { ok: false, error: "This phone number already has a login. Sign in instead." };
     return failure(error);
   }
 }

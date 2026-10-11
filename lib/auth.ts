@@ -1,7 +1,9 @@
 import bcrypt from "bcryptjs";
 import { getServerSession, type NextAuthOptions, type Session } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
+import { clearPinFailures, pinLocked, recordPinFailure } from "./pin-throttle";
 import { prisma } from "./prisma";
+import { whatsappNumber } from "./whatsapp";
 
 import type { Role } from "./roles";
 
@@ -34,6 +36,31 @@ export const authOptions: NextAuthOptions = {
           name: user.name,
           role: user.subcontractorId ? "sub" : "staff",
         };
+      },
+    }),
+    // Subcontractors who set up their own login from an invite link: phone number + 6-digit PIN.
+    Credentials({
+      id: "sub-pin",
+      name: "Subcontractor phone and PIN",
+      credentials: {
+        phone: { label: "Phone", type: "tel" },
+        pin: { label: "PIN", type: "password" },
+      },
+      async authorize(credentials) {
+        const phone = whatsappNumber(credentials?.phone);
+        const pin = credentials?.pin ?? "";
+        if (!phone || !/^\d{6}$/.test(pin)) return null;
+        // A locked phone number is refused even with the right PIN, so guessing gains nothing.
+        if (await pinLocked(phone)) throw new Error("LOCKED");
+        const user = await prisma.user.findUnique({ where: { phone } });
+        const valid = !!user?.subcontractorId && (await bcrypt.compare(pin, user.passwordHash));
+        if (!valid || !user) {
+          await recordPinFailure(phone);
+          if (await pinLocked(phone)) throw new Error("LOCKED");
+          return null;
+        }
+        await clearPinFailures(phone);
+        return { id: user.id, email: user.email, name: user.name, role: "sub" };
       },
     }),
     // Clients of the contractor sign in to the read-only portal here (a separate table).

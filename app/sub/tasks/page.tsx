@@ -7,7 +7,8 @@ import { TaskDoneForm } from "@/components/tasks/task-done-form";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
-import { formatDate, formatDateTime, todayInMalaysia } from "@/lib/format";
+import { formatDate, formatDateTime, formatRM, todayInMalaysia } from "@/lib/format";
+import { owedSummary } from "@/lib/sub-owed";
 import { subOrRedirect } from "@/lib/portal";
 import { prisma } from "@/lib/prisma";
 import { BUCKET_LABELS, BUCKET_ORDER, dailySummary, dueBucket } from "@/lib/schedule";
@@ -22,10 +23,12 @@ export const dynamic = "force-dynamic";
 export default async function SubTasksPage() {
   const { subcontractorId, user } = await subOrRedirect();
   const sub = await prisma.subcontractor.findUnique({ where: { id: subcontractorId } });
-  const [tasks, punch] = await Promise.all([
+  const [tasks, punch, subCosts] = await Promise.all([
     prisma.task.findMany({ where: { subcontractorId }, include: { project: { select: { name: true } } }, orderBy: { dueDate: "asc" } }),
     prisma.punchItem.findMany({ where: { subcontractorId, status: "OPEN" }, include: { project: { select: { name: true } } }, orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }] }),
+    prisma.costEntry.findMany({ where: { subcontractorId, category: "SUBCON" }, include: { project: { select: { name: true } } } }),
   ]);
+  const owed = owedSummary(subCosts.map((c) => ({ projectId: c.projectId, projectName: c.project.name, amount: c.amount, paidAt: c.paidAt })));
   const today = todayInMalaysia();
   const open = tasks.filter((t) => t.status === "OPEN");
   const done = tasks.filter((t) => t.status === "DONE").sort((a, b) => (b.completedAt?.getTime() ?? 0) - (a.completedAt?.getTime() ?? 0));
@@ -36,6 +39,24 @@ export default async function SubTasksPage() {
     <>
       <PortalHeader title="My tasks" home="/sub/tasks" signOutTo="/login" />
       <SubNav />
+      <section aria-label="What you are owed" className="mb-5 rounded-xl border bg-card p-4 shadow-sm" data-testid="owed">
+        <p className="text-lg font-semibold" data-testid="owed-headline">
+          You are owed {formatRM(owed.total.toNumber())} across {owed.projects.length} {owed.projects.length === 1 ? "project" : "projects"}.
+        </p>
+        {owed.projects.length > 0 ? (
+          <ul className="mt-2 space-y-1 text-sm">
+            {owed.projects.map((p) => (
+              <li key={p.projectId} className="flex justify-between gap-3" data-testid="owed-project">
+                <span className="min-w-0 truncate">{p.name}</span>
+                <span className="font-mono tabular-nums">{formatRM(p.owed.toNumber())}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-1 text-sm text-muted-foreground">Nothing is waiting to be paid to you right now.</p>
+        )}
+      </section>
+
       <p className="mb-4 text-sm text-muted-foreground">
         {sub?.name ?? user.email} · {open.length} open task{open.length === 1 ? "" : "s"}
         {projectCount > 0 ? ` across ${projectCount} project${projectCount === 1 ? "" : "s"}` : ""}

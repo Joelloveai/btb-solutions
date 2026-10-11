@@ -50,5 +50,5 @@ export default withAuth(
 export const config = {
   // The service worker, manifest and offline page must be reachable without signing in
   // (a service-worker script cannot be served through a redirect).
-  matcher: ["/((?!login|api/auth|_next|favicon.ico|logo.svg|sw.js|manifest.webmanifest|offline).*)"],
+  matcher: ["/((?!login|join/|api/auth|_next|favicon.ico|logo.svg|sw.js|manifest.webmanifest|offline).*)"],
 };

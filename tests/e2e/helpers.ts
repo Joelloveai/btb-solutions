@@ -4,8 +4,14 @@ export async function login(page: Page) {
   await page.goto("/login");
   await page.getByLabel("Email").fill("boss@btb.my");
   await page.getByLabel("Password").fill("btb12345");
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page).toHaveURL(/\/dashboard/);
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  try {
+    await expect(page).toHaveURL(/\/dashboard/, { timeout: 8000 });
+  } catch {
+    // The first request to a cold dev server can click before the page has hydrated: once more.
+    await page.getByRole("button", { name: "Sign in", exact: true }).click();
+    await expect(page).toHaveURL(/\/dashboard/);
+  }
 }
 
 export async function createProject(page: Page, name: string, contractValue: string) {

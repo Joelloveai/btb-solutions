@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { EditSubcontractorButton } from "@/components/forms/subcontractor-form";
 import { MarkPaidButton } from "@/components/subcons/mark-paid-button";
+import { InviteToApp } from "@/components/subcons/invite-to-app";
 import { LoginAccess } from "@/components/portal/login-access";
 import { EmptyState } from "@/components/ui/empty-state";
 import { KpiCard } from "@/components/ui/kpi-card";
@@ -50,11 +51,13 @@ export default async function SubconPage({ params }: { params: { id: string } })
         </div>
       </div>
 
+      <InviteToApp subcontractorId={sub.id} hasLogin={sub.users.some((u) => !!u.phone)} />
+
       <LoginAccess
         title="Task log login"
         description="Lets this subcontractor see the tasks you assign them, mark them done and upload a photo."
         loginPath="/login"
-        users={sub.users.map((u) => ({ id: u.id, email: u.email, name: u.name }))}
+        users={sub.users.map((u) => ({ id: u.id, email: u.phone ? `+${u.phone} (phone + PIN)` : u.email, name: u.name }))}
         kind="sub"
         ownerId={sub.id}
       />
