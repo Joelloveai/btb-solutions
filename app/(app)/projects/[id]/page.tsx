@@ -17,6 +17,8 @@ import { reminderLink } from "@/lib/whatsapp";
 import { LoginAccess } from "@/components/portal/login-access";
 import { OfflineSnapshot } from "@/components/offline/offline-snapshot";
 import { getT } from "@/lib/locale";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { fetchTimelinePage } from "@/lib/timeline-query";
 import { Prisma } from "@prisma/client";
@@ -47,6 +49,8 @@ export default async function ProjectPage({ params }: { params: { id: string } }
   });
   if (!project) notFound();
   const timeline = await fetchTimelinePage(project.id, "all");
+  const viewerId = (await getServerSession(authOptions))?.user?.id ?? null;
+  const diaries = await prisma.siteDiary.findMany({ where: { projectId: project.id }, orderBy: { date: "desc" } });
   const uploaderEmails = new Map(
     (await prisma.user.findMany({ where: { id: { in: project.documents.map((d) => d.uploadedById).filter((id): id is string => !!id) } }, select: { id: true, email: true } })).map((u) => [u.id, u.email]),
   );
@@ -233,6 +237,19 @@ export default async function ProjectPage({ params }: { params: { id: string } }
       <ProjectTabs
         projectId={project.id}
         timeline={timeline}
+        materialCosts={project.costs.filter((c) => c.category === "MATERIAL").map((c) => ({ dateKey: c.date.toISOString().slice(0, 10), description: c.description }))}
+        diaries={diaries.map((d) => ({
+          id: d.id,
+          dateKey: d.date.toISOString().slice(0, 10),
+          dateText: formatDate(d.date, locale),
+          weather: d.weather,
+          locked: d.status === "LOCKED",
+          preparedBy: d.preparedBy,
+          preparedAtText: formatDateTime(d.preparedAt, locale),
+          verifiedBy: d.verifiedBy,
+          verifiedAtText: d.verifiedAt ? formatDateTime(d.verifiedAt, locale) : null,
+          canCountersign: d.status !== "LOCKED" && d.preparedById !== viewerId,
+        }))}
         photos={progressPhotos.map(toPhotoItem)}
         checklistCounts={checklistCounts}
         floorPlans={project.photos.filter((p) => p.kind === "FLOORPLAN").map(toPhotoItem)}

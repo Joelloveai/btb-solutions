@@ -1,25 +1,27 @@
 "use client";
 
-import { Camera, Plus, Receipt, StickyNote, type LucideIcon } from "lucide-react";
+import { Camera, HardHat, Plus, Receipt, StickyNote, type LucideIcon } from "lucide-react";
 import { useCallback, useState } from "react";
 import { CostFormBody } from "@/components/forms/add-cost-form";
 import { PhotoUpload } from "@/components/photos/photo-upload";
 import type { Lookups } from "@/components/projects/lookups";
 import { Modal } from "@/components/ui/modal";
+import { DiaryForm, type MaterialCost } from "@/components/diary/diary-form";
 import { NoteForm } from "./note-form";
 
-type Mode = "menu" | "photo" | "note" | "cost";
+type Mode = "menu" | "photo" | "note" | "cost" | "diary";
 
 const CHOICES: { mode: Exclude<Mode, "menu">; label: string; Icon: LucideIcon }[] = [
   { mode: "photo", label: "Photo", Icon: Camera },
   { mode: "note", label: "Note", Icon: StickyNote },
   { mode: "cost", label: "Cost", Icon: Receipt },
+  { mode: "diary", label: "Diary", Icon: HardHat },
 ];
 
-const TITLES: Record<Mode, string> = { menu: "Add to timeline", photo: "Add photo", note: "Add note", cost: "Add cost" };
+const TITLES: Record<Mode, string> = { menu: "Add to timeline", photo: "Add photo", note: "Add note", cost: "Add cost", diary: "Site diary" };
 
 /** The "+" button at the bottom-right: one tap to add anything to this project's timeline. */
-export function AddToTimeline({ projectId, lookups }: { projectId: string; lookups: Lookups }) {
+export function AddToTimeline({ projectId, lookups, materialCosts }: { projectId: string; lookups: Lookups; materialCosts: MaterialCost[] }) {
   const [mode, setMode] = useState<Mode | null>(null);
   const close = useCallback(() => setMode(null), []);
   return (
@@ -51,6 +53,7 @@ export function AddToTimeline({ projectId, lookups }: { projectId: string; looku
         ) : null}
         {mode === "photo" ? <PhotoUpload kind="PROGRESS" projectId={projectId} label="Take photo" autoOpen onDone={close} /> : null}
         {mode === "note" ? <NoteForm projectId={projectId} close={close} /> : null}
+        {mode === "diary" ? <DiaryForm projectId={projectId} materialCosts={materialCosts} close={close} /> : null}
         {mode === "cost" ? <CostFormBody projectId={projectId} lookups={lookups} close={close} /> : null}
       </Modal>
     </>

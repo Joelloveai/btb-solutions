@@ -1,8 +1,8 @@
 "use client";
 
-import { forwardRef, useEffect, useRef, useState, type InputHTMLAttributes } from "react";
+import { forwardRef, useEffect, useRef, useState, type InputHTMLAttributes, type TextareaHTMLAttributes } from "react";
 import { toast } from "sonner";
-import { Input } from "@/components/ui/field";
+import { Input, Textarea } from "@/components/ui/field";
 import { cn } from "@/lib/utils";
 
 type Recognition = {
@@ -22,8 +22,9 @@ function recognitionCtor(): (new () => Recognition) | null {
 }
 
 /** Sets the value the way a keystroke would, so react-hook-form and controlled inputs both notice. */
-function setNativeValue(el: HTMLInputElement, value: string) {
-  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(el, value);
+function setNativeValue(el: HTMLInputElement | HTMLTextAreaElement, value: string) {
+  const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+  Object.getOwnPropertyDescriptor(proto, "value")?.set?.call(el, value);
   el.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
@@ -32,11 +33,13 @@ function setNativeValue(el: HTMLInputElement, value: string) {
  * Typing always works; the mic is an extra. Many phones do their recognising on a server,
  * so with no signal it says so and leaves the keyboard to the user.
  */
-export const VoiceInput = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(function VoiceInput(
-  { className, ...props },
+type VoiceProps = (InputHTMLAttributes<HTMLInputElement> & { multiline?: false }) | (TextareaHTMLAttributes<HTMLTextAreaElement> & { multiline: true });
+
+export const VoiceInput = forwardRef<HTMLInputElement | HTMLTextAreaElement, VoiceProps>(function VoiceInput(
+  { className, multiline, ...props },
   ref,
 ) {
-  const inner = useRef<HTMLInputElement | null>(null);
+  const inner = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
   const rec = useRef<Recognition | null>(null);
   const [listening, setListening] = useState(false);
   const [supported, setSupported] = useState(false);
@@ -77,15 +80,28 @@ export const VoiceInput = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLI
 
   return (
     <div className="relative">
-      <Input
-        {...props}
-        ref={(node) => {
-          inner.current = node;
-          if (typeof ref === "function") ref(node);
-          else if (ref) ref.current = node;
-        }}
-        className={cn(supported && "pr-14", className)}
-      />
+      {multiline ? (
+        <Textarea
+          {...(props as TextareaHTMLAttributes<HTMLTextAreaElement>)}
+          rows={(props as TextareaHTMLAttributes<HTMLTextAreaElement>).rows ?? 3}
+          ref={(node) => {
+            inner.current = node;
+            if (typeof ref === "function") ref(node);
+            else if (ref) ref.current = node;
+          }}
+          className={cn(supported && "pr-14", className)}
+        />
+      ) : (
+        <Input
+          {...(props as InputHTMLAttributes<HTMLInputElement>)}
+          ref={(node) => {
+            inner.current = node;
+            if (typeof ref === "function") ref(node as HTMLInputElement);
+            else if (ref) ref.current = node;
+          }}
+          className={cn(supported && "pr-14", className)}
+        />
+      )}
       {supported ? (
         <button
           type="button"
@@ -93,7 +109,7 @@ export const VoiceInput = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLI
           aria-label={listening ? "Stop dictation" : "Dictate with microphone"}
           aria-pressed={listening}
           className={cn(
-            "absolute right-0 top-0 flex h-full w-12 items-center justify-center rounded-r-md text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            "absolute right-0 top-0 flex h-12 w-12 items-center justify-center rounded-r-md text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             listening && "animate-pulse text-destructive",
           )}
         >

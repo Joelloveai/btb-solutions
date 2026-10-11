@@ -1,5 +1,8 @@
 import { z } from "zod";
 import {
+  DIARY_MACHINERY,
+  DIARY_MANPOWER_TRADES,
+  DIARY_WEATHER,
   CHANGE_ORDER_STATUSES,
   COST_CATEGORIES,
   PHOTO_TRADES,
@@ -184,3 +187,15 @@ export const milestoneSchema = z.object({
   dueDate: dateString.optional().or(z.literal("")),
 });
 export type MilestoneInput = z.infer<typeof milestoneSchema>;
+
+export const diarySchema = z.object({
+  date: dateString,
+  weather: z.enum(DIARY_WEATHER),
+  manpower: z.record(z.string(), z.number().int().min(0).max(999)).refine((m) => Object.keys(m).every((k) => (DIARY_MANPOWER_TRADES as readonly string[]).includes(k)), "Unknown trade"),
+  machinery: z.array(z.enum(DIARY_MACHINERY)).max(20),
+  worksDone: z.string().trim().min(1, "Write what was done today").max(4000),
+  issues: z.string().trim().max(4000).optional().or(z.literal("")),
+  visitorLog: z.string().trim().max(2000).optional().or(z.literal("")),
+  signature: z.string().max(400_000),
+});
+export type DiaryInput = z.infer<typeof diarySchema>;

@@ -4,12 +4,14 @@ import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import bcrypt from "bcryptjs";
 import { requireClient, requireSession, requireSub } from "@/lib/auth";
-import { deleteDocumentFile } from "@/lib/document-storage";
 import { deletePhotoFile } from "@/lib/photos";
 import { computeClaim } from "@/lib/claims";
 import { PROJECT_STAGES } from "@/lib/constants";
 import { isLocale } from "@/lib/i18n";
 import { prisma } from "@/lib/prisma";
+import { createHash, randomBytes } from "node:crypto";
+import { saveDocumentFile, deleteDocumentFile } from "@/lib/document-storage";
+import { buildDiaryPdf, decodeSignature, diaryContentHash, newPdfKey, pdfIdFromKey, signatureHash } from "@/lib/site-diary";
 import { appendEvent, recorded, rm } from "@/lib/timeline";
 import { actorFromSession } from "@/lib/timeline-actor";
 import { calculateQuote } from "@/lib/quotes";
@@ -18,6 +20,7 @@ import {
   changeOrderSchema,
   claimSchema,
   dailyLogSchema,
+  diarySchema,
   loginUserSchema,
   milestoneSchema,
   punchSchema,
@@ -1525,6 +1528,184 @@ export async function approveSelection(id: string): Promise<ActionResult> {
     revalidateAll();
     return { ok: true };
   } catch (error) {
+    return failure(error);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Site diary (Buku Harian Tapak Bina)
+// ---------------------------------------------------------------------------
+
+const DIARY_FILE = "application/pdf";
+
+/**
+ * The supervisor signs the day's diary. It is then fixed: nothing in it can be edited. A second person
+ * (not the preparer) countersigns, which locks it. Each step is a timeline event with the PDF's fingerprint.
+ */
+export async function createSiteDiary(projectId: string, input: unknown, requestId?: string, signedAtIso?: string): Promise<ActionResult<{ id: string }>> {
+  const rid = requestIdOf(requestId);
+  let saved: { id: string; fileKey: string; mimeType: string } | null = null;
+  try {
+    const session = await requireSession();
+    const parsed = diarySchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+    const v = parsed.data;
+    const png = decodeSignature(v.signature);
+    if (!png) return { ok: false, error: "Please sign in the box first." };
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kuala_Lumpur" }).format(new Date());
+    if (v.date > today) return { ok: false, error: "A diary cannot be dated in the future." };
+    const project = await prisma.project.findUnique({ where: { id: projectId } });
+    if (!project) return { ok: false, error: "Project not found." };
+    const date = toDate(v.date);
+    if (await prisma.siteDiary.findUnique({ where: { projectId_date: { projectId, date } } })) {
+      return { ok: false, error: "There is already a diary for that day." };
+    }
+
+    const actor = actorFromSession(session);
+    const materials = await prisma.costEntry.findMany({ where: { projectId, category: "MATERIAL", date }, orderBy: { createdAt: "asc" } });
+    // A diary signed with no signal keeps the time it was signed on the phone (the server's arrival time is in the timeline event).
+    const claimed = signedAtIso ? new Date(signedAtIso) : null;
+    const now = new Date();
+    const preparedAt = claimed && !Number.isNaN(claimed.getTime()) && claimed.getTime() <= now.getTime() && claimed.getTime() > now.getTime() - 30 * 86_400_000 ? claimed : now;
+    const content = {
+      projectId,
+      date: v.date,
+      weather: v.weather,
+      manpower: v.manpower,
+      machinery: v.machinery,
+      materialsIn: materials.map((m) => ({ description: m.description, vendor: m.vendor })),
+      worksDone: v.worksDone,
+      issues: orNull(v.issues),
+      visitorLog: orNull(v.visitorLog),
+      preparedById: actor.id ?? "",
+      preparedAtIso: preparedAt.toISOString(),
+    };
+    const contentHash = diaryContentHash(content);
+    const sigHash = signatureHash(contentHash, content.preparedById, content.preparedAtIso, png);
+    const preparedBy = actor.name ?? "Staff";
+    const pdf = await buildDiaryPdf({ ...content, projectName: project.name, preparedBy, preparedSignature: png, preparedSignatureHash: sigHash, contentHash, verified: null });
+    const pdfKey = newPdfKey(projectId);
+    saved = { id: pdfIdFromKey(pdfKey), fileKey: pdfKey, mimeType: DIARY_FILE };
+    await saveDocumentFile(saved, pdf);
+    const pdfSha256 = createHash("sha256").update(pdf).digest("hex");
+
+    const id = randomBytes(12).toString("hex");
+    await recorded(async (tx) => {
+      await tx.siteDiary.create({
+        data: {
+          id,
+          projectId,
+          date,
+          weather: v.weather,
+          manpower: JSON.stringify(v.manpower),
+          machinery: JSON.stringify(v.machinery),
+          materialsIn: JSON.stringify(content.materialsIn),
+          worksDone: v.worksDone,
+          issues: content.issues,
+          visitorLog: content.visitorLog,
+          preparedById: content.preparedById,
+          preparedBy,
+          preparedAt,
+          preparedSignature: Buffer.from(png).toString("base64"),
+          preparedSignatureHash: sigHash,
+          contentHash,
+          pdfKey,
+          pdfSha256,
+          clientRequestId: rid,
+        },
+      });
+      await appendEvent(tx, {
+        projectId,
+        type: "SITE_DIARY",
+        actor,
+        title: `Site diary signed for ${v.date}`,
+        description: `${v.weather}. ${v.worksDone}`.slice(0, 300),
+        capturedAt: preparedAt,
+        metadata: { action: "signed", diaryId: id, date: v.date, contentHash, signatureHash: sigHash, pdfSha256, awaiting: true },
+      });
+    });
+    revalidateAll();
+    return { ok: true, data: { id } };
+  } catch (error) {
+    if (saved) await deleteDocumentFile(saved).catch(() => undefined);
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      if (rid && (await prisma.siteDiary.findUnique({ where: { clientRequestId: rid } }))) return { ok: true };
+      return { ok: false, error: "There is already a diary for that day." };
+    }
+    return failure(error);
+  }
+}
+
+/** A different person from the preparer countersigns. This locks the diary for good. */
+export async function countersignSiteDiary(id: string, signature: string): Promise<ActionResult> {
+  let saved: { id: string; fileKey: string; mimeType: string } | null = null;
+  try {
+    const session = await requireSession();
+    const actor = actorFromSession(session);
+    const diary = await prisma.siteDiary.findUnique({ where: { id }, include: { project: true } });
+    if (!diary) return { ok: false, error: "Diary not found." };
+    if (diary.status === "LOCKED") return { ok: true };
+    if (diary.preparedById === actor.id) return { ok: false, error: "A different person must countersign this diary." };
+    const png = decodeSignature(signature);
+    if (!png) return { ok: false, error: "Please sign in the box first." };
+
+    const verifiedAt = new Date();
+    const verifiedBy = actor.name ?? "Staff";
+    const sigHash = signatureHash(diary.contentHash, actor.id ?? "", verifiedAt.toISOString(), png);
+    const dateKey = diary.date.toISOString().slice(0, 10);
+    const pdf = await buildDiaryPdf({
+      projectId: diary.projectId,
+      date: dateKey,
+      weather: diary.weather,
+      manpower: JSON.parse(diary.manpower),
+      machinery: JSON.parse(diary.machinery),
+      materialsIn: JSON.parse(diary.materialsIn),
+      worksDone: diary.worksDone,
+      issues: diary.issues,
+      visitorLog: diary.visitorLog,
+      preparedById: diary.preparedById,
+      preparedAtIso: diary.preparedAt.toISOString(),
+      projectName: diary.project.name,
+      preparedBy: diary.preparedBy,
+      preparedSignature: new Uint8Array(Buffer.from(diary.preparedSignature, "base64")),
+      preparedSignatureHash: diary.preparedSignatureHash,
+      contentHash: diary.contentHash,
+      verified: { by: verifiedBy, atIso: verifiedAt.toISOString(), signature: png, hash: sigHash },
+    });
+    const pdfKey = newPdfKey(diary.projectId);
+    saved = { id: pdfIdFromKey(pdfKey), fileKey: pdfKey, mimeType: DIARY_FILE };
+    await saveDocumentFile(saved, pdf);
+    const pdfSha256 = createHash("sha256").update(pdf).digest("hex");
+
+    await recorded(async (tx) => {
+      // Only the first countersignature counts; a second tap finds nothing left to update.
+      const changed = await tx.siteDiary.updateMany({
+        where: { id, status: "AWAITING_COUNTERSIGN" },
+        data: {
+          status: "LOCKED",
+          verifiedById: actor.id,
+          verifiedBy,
+          verifiedAt,
+          verifiedSignature: Buffer.from(png).toString("base64"),
+          verifiedSignatureHash: sigHash,
+          pdfKey,
+          pdfSha256,
+        },
+      });
+      if (changed.count === 0) return;
+      await appendEvent(tx, {
+        projectId: diary.projectId,
+        type: "SITE_DIARY",
+        actor,
+        title: `Site diary for ${dateKey} countersigned and locked`,
+        description: `Prepared by ${diary.preparedBy}, countersigned by ${verifiedBy}`,
+        metadata: { action: "locked", diaryId: id, date: dateKey, contentHash: diary.contentHash, signatureHash: sigHash, pdfSha256 },
+      });
+    });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    if (saved) await deleteDocumentFile(saved).catch(() => undefined);
     return failure(error);
   }
 }

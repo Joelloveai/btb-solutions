@@ -1,7 +1,7 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 
 /** What can wait in the outbox until the phone has signal again. */
-export type OpType = "addCost" | "addPayment" | "createTask" | "completeTask" | "uploadPhoto" | "createPunch" | "resolvePunch" | "uploadDocument" | "createSelection" | "createDailyLog" | "addNote";
+export type OpType = "addCost" | "addPayment" | "createTask" | "completeTask" | "uploadPhoto" | "createPunch" | "resolvePunch" | "uploadDocument" | "createSelection" | "createDailyLog" | "addNote" | "createDiary";
 
 export type StoredFile = { bytes: ArrayBuffer; type: string; name: string };
 

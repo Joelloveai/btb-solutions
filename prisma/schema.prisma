@@ -51,6 +51,7 @@ model Project {
   dailyLogs         DailyLog[]
   paymentMilestones PaymentMilestone[]
   timelineEvents    TimelineEvent[]
+  siteDiaries       SiteDiary[]
 }
 
 model CostEntry {
@@ -378,26 +379,64 @@ model PaymentMilestone {
 /// Append-only record of what happened on a project. Each row's hash covers its content and the previous
 /// row's hash, so altering or removing any past row breaks the chain from that point on.
 model TimelineEvent {
-  id           String   @id @default(cuid())
-  projectId    String
-  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  seq          Int
-  eventType    String
-  actorId      String?
-  actorRole    String
-  actorName    String?
-  title        String
-  description  String?
-  metadata     String   @default("{}")
-  latitude     Float?
-  longitude    Float?
-  capturedAt   DateTime
-  createdAt    DateTime @default(now())
-  hash         String
-  previousHash String?
+  id              String   @id @default(cuid())
+  projectId       String
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  seq             Int
+  eventType       String
+  actorId         String?
+  actorRole       String
+  actorName       String?
+  title           String
+  description     String?
+  metadata        String   @default("{}")
+  latitude        Float?
+  longitude       Float?
+  capturedAt      DateTime
+  createdAt       DateTime @default(now())
+  hash            String
+  previousHash    String?
   /// Lets a retried note from a phone with bad signal be recognised. Not part of the hash.
-  clientRequestId String? @unique
+  clientRequestId String?  @unique
 
   @@unique([projectId, seq])
   @@index([projectId, capturedAt])
+}
+
+/// The digital Buku Harian Tapak Bina: one per project per day, signed by the preparer and countersigned.
+/// Once countersigned (status LOCKED) it is never changed.
+model SiteDiary {
+  id                    String    @id
+  projectId             String
+  project               Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  date                  DateTime
+  weather               String
+  /// JSON: { "Plumbing": 3, ... }
+  manpower              String    @default("{}")
+  /// JSON array of names
+  machinery             String    @default("[]")
+  /// JSON array of { description, vendor } taken from that day's material costs
+  materialsIn           String    @default("[]")
+  worksDone             String
+  issues                String?
+  visitorLog            String?
+  status                String    @default("AWAITING_COUNTERSIGN")
+  preparedById          String
+  preparedBy            String
+  preparedAt            DateTime
+  preparedSignature     String
+  preparedSignatureHash String
+  verifiedById          String?
+  verifiedBy            String?
+  verifiedAt            DateTime?
+  verifiedSignature     String?
+  verifiedSignatureHash String?
+  /// SHA-256 of the diary's content (what both signatures are bound to)
+  contentHash           String
+  pdfKey                String?
+  pdfSha256             String?
+  clientRequestId       String?   @unique
+  createdAt             DateTime  @default(now())
+
+  @@unique([projectId, date])
 }

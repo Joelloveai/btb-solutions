@@ -121,3 +121,7 @@ export const TIMELINE_FILTERS = [
   { id: "documents", label: "Documents", types: ["DOCUMENT_UPLOADED"] },
   { id: "diary", label: "Diary", types: ["SITE_DIARY", "NOTE"] },
 ] as const;
+
+export const DIARY_WEATHER = ["Sunny", "Cloudy", "Rain", "Heavy rain"] as const;
+export const DIARY_MACHINERY = ["Excavator", "Crane", "Concrete mixer", "Scaffolding", "Generator", "Compressor", "Lorry"] as const;
+export const DIARY_MANPOWER_TRADES = ["General worker", ...PHOTO_TRADES] as const;

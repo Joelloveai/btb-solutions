@@ -35,6 +35,8 @@ import { AddChangeOrderForm } from "@/components/forms/add-change-order-form";
 import { AddCostForm } from "@/components/forms/add-cost-form";
 import { AddPaymentForm } from "@/components/forms/add-payment-form";
 import { Badge } from "@/components/ui/badge";
+import { DiaryPanel, type DiaryRow } from "@/components/diary/diary-panel";
+import type { MaterialCost } from "@/components/diary/diary-form";
 import { AddToTimeline } from "@/components/timeline/capture-sheet";
 import { TimelinePanel } from "@/components/timeline/timeline-panel";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -108,6 +110,7 @@ const TABS = [
   { id: "tasks", label: "Tasks" },
   { id: "punch", label: "Punch List" },
   { id: "documents", label: "Documents" },
+  { id: "diary", label: "Site Diary" },
   { id: "client", label: "For Client" },
 ] as const;
 
@@ -129,6 +132,8 @@ export function ProjectTabs({
   documents,
   clientView,
   timeline,
+  diaries,
+  materialCosts,
 }: {
   projectId: string;
   costs: CostRow[];
@@ -147,6 +152,8 @@ export function ProjectTabs({
   documents: DocRow[];
   clientView: ComponentProps<typeof ClientViewPanel>;
   timeline: ComponentProps<typeof TimelinePanel>["initial"];
+  diaries: DiaryRow[];
+  materialCosts: MaterialCost[];
 }) {
   const t = useT();
   const openPunch = punch.filter((p) => p.status !== "CLOSED").length;
@@ -210,6 +217,9 @@ export function ProjectTabs({
           </section>
         </div>
       </TabsContent>
+      <TabsContent value="diary">
+        <DiaryPanel projectId={projectId} rows={diaries} materialCosts={materialCosts} />
+      </TabsContent>
       <TabsContent value="client">
         <ClientViewPanel {...clientView} />
       </TabsContent>
@@ -225,7 +235,7 @@ export function ProjectTabs({
         <PendingOps projectId={projectId} types={["createTask", "completeTask"]} />
         <TasksPanel projectId={projectId} rows={tasks} lookups={lookups} />
       </TabsContent>
-      <AddToTimeline projectId={projectId} lookups={lookups} />
+      <AddToTimeline projectId={projectId} lookups={lookups} materialCosts={materialCosts} />
     </Tabs>
   );
 }
