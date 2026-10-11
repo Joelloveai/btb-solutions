@@ -44,6 +44,7 @@ model Project {
   photos            Photo[]
   tasks             Task[]
   punchItems        PunchItem[]
+  documents         Document[]
 }
 
 model CostEntry {
@@ -280,4 +281,35 @@ model PunchItem {
   /// When the contractor checked it and closed it.
   closedAt        DateTime?
   clientRequestId String?        @unique
+}
+
+/// One uploaded version of a named document (drawing, specification, contract). Uploading the same
+/// name again creates the next version; only the latest is `isCurrent`.
+model Document {
+  id              String   @id
+  projectId       String
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name            String
+  /// Lower-cased, trimmed name: what decides that two uploads are versions of the same document.
+  nameKey         String
+  /// One of DOCUMENT_TYPES (lib/constants.ts)
+  type            String
+  /// One of PHOTO_TRADES; empty means "relevant to every trade".
+  trade           String?
+  version         Int
+  isCurrent       Boolean  @default(true)
+  /// Where the bytes are stored (an R2 key; local-disk storage uses the id).
+  fileKey         String
+  fileName        String
+  mimeType        String
+  size            Int
+  sha256          String
+  /// What changed in this version, e.g. "Rev B: kitchen wall moved 300 mm".
+  note            String?
+  uploadedById    String?
+  uploadedAt      DateTime @default(now())
+  clientRequestId String?  @unique
+
+  @@unique([projectId, nameKey, version])
+  @@index([projectId, isCurrent])
 }

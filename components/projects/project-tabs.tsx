@@ -24,6 +24,7 @@ import { BEFORE_COVER_ITEMS } from "@/lib/constants";
 import { Download } from "lucide-react";
 import { PhotoGallery, type PhotoItem } from "@/components/photos/photo-gallery";
 import { PhotoUpload } from "@/components/photos/photo-upload";
+import { DocumentsPanel, type DocRow } from "@/components/documents/documents-panel";
 import { PunchPanel, type PunchRow } from "@/components/punch/punch-panel";
 import { TasksPanel, type TaskRow } from "@/components/tasks/tasks-panel";
 import { AddChangeOrderForm } from "@/components/forms/add-change-order-form";
@@ -95,6 +96,7 @@ const TABS = [
   { id: "photos", label: "Progress Photos" },
   { id: "tasks", label: "Tasks" },
   { id: "punch", label: "Punch List" },
+  { id: "documents", label: "Documents" },
 ] as const;
 
 const tone = { PENDING: "yellow", APPROVED: "green", REJECTED: "red" } as const;
@@ -112,6 +114,7 @@ export function ProjectTabs({
   floorPlans,
   tasks,
   punch,
+  documents,
 }: {
   projectId: string;
   costs: CostRow[];
@@ -127,6 +130,7 @@ export function ProjectTabs({
   floorPlans: PhotoItem[];
   tasks: TaskRow[];
   punch: PunchRow[];
+  documents: DocRow[];
 }) {
   const t = useT();
   const openPunch = punch.filter((p) => p.status !== "CLOSED").length;
@@ -186,6 +190,10 @@ export function ProjectTabs({
             <PhotoGallery photos={floorPlans} canDelete emptyText="No floor plan uploaded." />
           </section>
         </div>
+      </TabsContent>
+      <TabsContent value="documents">
+        <PendingOps projectId={projectId} types={["uploadDocument"]} />
+        <DocumentsPanel projectId={projectId} docs={documents} />
       </TabsContent>
       <TabsContent value="punch">
         <PendingOps projectId={projectId} types={["createPunch"]} />

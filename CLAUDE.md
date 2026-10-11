@@ -19,3 +19,5 @@ Photo evidence: each Photo keeps `capturedAt` (the phone's clock, range-checked 
 
 Punch list: `PunchItem` goes OPEN -> DONE (the assigned subcontractor, `resolvePunchItem`, with a fix photo) -> CLOSED (`closePunchItem`, contractor only). Its photos are `Photo.kind = "PUNCH"`: staff see all, a subcontractor sees only their own items', clients none. Raising and fixing items are queueable offline (`createPunch`, `resolvePunch`). The walk sheet is `/projects/[id]/punch/print`.
 
+Documents: `Document` rows are versions. Uploading a name that already exists in the project (case and spacing ignored, `nameKey`) makes version N+1 and flips `isCurrent`; old versions are kept. Staff can open any version; a subcontractor can fetch only the CURRENT version of a Drawing, for their trade (or all trades), on a project they have a task or punch item on (`lib/document-access.ts`); clients get nothing. File types are checked by bytes (`lib/document-files.ts`) and non-image/PDF files are download-only.
+

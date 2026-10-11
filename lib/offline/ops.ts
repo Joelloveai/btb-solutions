@@ -40,13 +40,13 @@ function fromAction(result: ActionResult<unknown>): ExecResult {
   return { kind: "invalid", error: result.error };
 }
 
-async function uploadFile(op: OutboxOp, requestId: string): Promise<{ id: string } | ExecResult> {
-  if (!op.file) return { kind: "invalid", error: "The photo is missing from this device." };
+async function uploadFile(op: OutboxOp, requestId: string, endpoint = "/api/photos"): Promise<{ id: string } | ExecResult> {
+  if (!op.file) return { kind: "invalid", error: "The file is missing from this device." };
   const body = new FormData();
   body.set("file", new Blob([op.file.bytes], { type: op.file.type }), op.file.name);
   for (const [key, value] of Object.entries(op.fields ?? {})) body.set(key, value);
   body.set("requestId", requestId);
-  const response = await fetch("/api/photos", { method: "POST", body });
+  const response = await fetch(endpoint, { method: "POST", body });
   if (response.status === 401) return { kind: "auth" };
   const json = (await response.json().catch(() => ({}))) as { id?: string; error?: string };
   if (response.ok && json.id) return { id: json.id };
@@ -80,6 +80,10 @@ export async function executeOp(op: OutboxOp): Promise<ExecResult> {
           await updateOp(op.id, { payload: { ...op.payload, photoId } });
         }
         return fromAction(await withTimeout(completeTask(op.payload.taskId as string, photoId)));
+      }
+      case "uploadDocument": {
+        const uploaded = await withTimeout(uploadFile(op, op.id, "/api/documents"), 120_000);
+        return "id" in uploaded ? { kind: "ok" } : uploaded;
       }
       case "createPunch": {
         // The photo of the defect goes up first (and is remembered), then the item that points at it.

@@ -8,7 +8,7 @@ import { authOptions } from "@/lib/auth";
 export default async function SubLayout({ children }: { children: React.ReactNode }) {
   const session = await getServerSession(authOptions);
   return (
-    <OfflineProvider userKey={`sub:${session?.user?.id ?? "unknown"}`} warmUrls={["/sub/tasks", "/sub/punch"]}>
+    <OfflineProvider userKey={`sub:${session?.user?.id ?? "unknown"}`} warmUrls={["/sub/tasks", "/sub/punch", "/sub/drawings"]}>
       <div className="flex min-h-screen flex-col bg-background print:min-h-0 print:bg-white">
         <div className="print:hidden">
           <CompanyBar />

@@ -37,9 +37,13 @@ export default async function ProjectPage({ params }: { params: { id: string } }
       photos: { orderBy: { takenAt: "desc" } },
       tasks: { orderBy: { dueDate: "asc" }, include: { subcontractor: true } },
       punchItems: { orderBy: { createdAt: "desc" }, include: { subcontractor: true } },
+      documents: { orderBy: [{ nameKey: "asc" }, { version: "desc" }] },
     },
   });
   if (!project) notFound();
+  const uploaderEmails = new Map(
+    (await prisma.user.findMany({ where: { id: { in: project.documents.map((d) => d.uploadedById).filter((id): id is string => !!id) } }, select: { id: true, email: true } })).map((u) => [u.id, u.email]),
+  );
   const portalUsers = project.clientId
     ? await prisma.clientUser.findMany({ where: { clientId: project.clientId }, orderBy: { createdAt: "asc" } })
     : [];
@@ -74,6 +78,8 @@ export default async function ProjectPage({ params }: { params: { id: string } }
         : null,
     };
   };
+  // "Latest Drawings": a current drawing uploaded within the last week, so people know to look.
+  const hasLatestDrawings = project.documents.some((d) => d.isCurrent && d.type === "Drawing" && Date.now() - d.uploadedAt.getTime() < 7 * 24 * 60 * 60 * 1000);
   const progressPhotos = project.photos.filter((p) => p.kind === "PROGRESS");
   const checklistCounts: Record<string, number> = {};
   for (const photo of progressPhotos) if (photo.checklistItem) checklistCounts[photo.checklistItem] = (checklistCounts[photo.checklistItem] ?? 0) + 1;
@@ -126,6 +132,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
         }
       >
         <Badge tone={statusTone[status] ?? "gray"}>{PROJECT_STATUS_LABELS[status] ?? project.status}</Badge>
+        {hasLatestDrawings ? <Badge tone="yellow">Latest Drawings</Badge> : null}
         <EditProjectButton
           id={project.id}
           values={{
@@ -214,6 +221,21 @@ export default async function ProjectPage({ params }: { params: { id: string } }
         photos={progressPhotos.map(toPhotoItem)}
         checklistCounts={checklistCounts}
         floorPlans={project.photos.filter((p) => p.kind === "FLOORPLAN").map(toPhotoItem)}
+        documents={project.documents.map((d) => ({
+          id: d.id,
+          name: d.name,
+          nameKey: d.nameKey,
+          type: d.type,
+          trade: d.trade,
+          version: d.version,
+          isCurrent: d.isCurrent,
+          fileName: d.fileName,
+          sizeText: d.size < 1024 * 1024 ? `${Math.max(1, Math.round(d.size / 1024))} KB` : `${(d.size / (1024 * 1024)).toFixed(1)} MB`,
+          note: d.note,
+          uploadedByText: (d.uploadedById && uploaderEmails.get(d.uploadedById)) || "—",
+          uploadedAtText: formatDateTime(d.uploadedAt, locale),
+          uploadedAtMs: d.uploadedAt.getTime(),
+        }))}
         punch={project.punchItems.map((item) => ({
           id: item.id,
           location: item.location,

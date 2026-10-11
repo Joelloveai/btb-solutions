@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 const LINKS = [
   { href: "/sub/tasks", label: "Tasks" },
   { href: "/sub/punch", label: "Punch list" },
+  { href: "/sub/drawings", label: "Drawings" },
 ];
 
 /** The subcontractor's few screens. Big, plain links. */

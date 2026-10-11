@@ -82,3 +82,6 @@ export const PUNCH_STATUS_LABELS: Record<PunchStatus, string> = {
   DONE: "Fixed, to verify",
   CLOSED: "Closed",
 };
+
+export const DOCUMENT_TYPES = ["Drawing", "Specification", "Contract", "Other"] as const;
+export type DocumentType = (typeof DOCUMENT_TYPES)[number];

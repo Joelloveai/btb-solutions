@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import bcrypt from "bcryptjs";
 import { requireSession, requireSub } from "@/lib/auth";
+import { deleteDocumentFile } from "@/lib/document-storage";
 import { deletePhotoFile } from "@/lib/photos";
 import { computeClaim } from "@/lib/claims";
 import { isLocale } from "@/lib/i18n";
@@ -983,6 +984,31 @@ export async function deletePunchItem(id: string): Promise<ActionResult> {
         await deletePhotoFile(photo).catch(() => undefined);
       }
     }
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Documents
+// ---------------------------------------------------------------------------
+
+/** Remove one uploaded version (a wrong file). If it was the current one, the newest remaining version becomes current. */
+export async function deleteDocumentVersion(id: string): Promise<ActionResult> {
+  try {
+    await requireSession();
+    const doc = await prisma.document.findUnique({ where: { id } });
+    if (!doc) return { ok: true };
+    await prisma.$transaction(async (tx) => {
+      await tx.document.delete({ where: { id } });
+      if (doc.isCurrent) {
+        const newest = await tx.document.findFirst({ where: { projectId: doc.projectId, nameKey: doc.nameKey }, orderBy: { version: "desc" } });
+        if (newest) await tx.document.update({ where: { id: newest.id }, data: { isCurrent: true } });
+      }
+    });
+    await deleteDocumentFile(doc).catch(() => undefined);
     revalidateAll();
     return { ok: true };
   } catch (error) {
