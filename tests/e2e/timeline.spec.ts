@@ -70,7 +70,7 @@ test("every action leaves an event on the project timeline, in an unbroken hash 
   await dialog.getByRole("button", { name: "Note" }).click();
   await dialog.getByLabel("Note", { exact: true }).fill("Owner asked to move the sink");
   await dialog.getByRole("button", { name: "Save note" }).click();
-  await expect(page.getByText("Saved. This will appear in your evidence pack.")).toBeVisible();
+  await expect(page.getByText("Saved. Will appear in your evidence pack.")).toBeVisible();
 
   await page.getByRole("button", { name: "Add to timeline" }).click();
   dialog = page.getByRole("dialog");

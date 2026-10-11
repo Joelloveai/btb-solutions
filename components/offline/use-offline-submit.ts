@@ -16,14 +16,14 @@ export type NewOp = Pick<OutboxOp, "type" | "label" | "projectId" | "payload" | 
  * when the connection returns. The same id is used for the live attempt and any later retry, so
  * the server can tell a repeat from a new entry and never applies one twice.
  */
-export function useOfflineSubmit(successMessage: string, close: () => void) {
+export function useOfflineSubmit(successMessage: string | (() => Promise<string | null>), close: () => void) {
   const router = useRouter();
   const { online, syncNow } = useOffline();
   const [pending, startTransition] = useTransition();
 
   const queue = async (op: OutboxOp) => {
     await enqueue(op);
-    toast.success("Saved on this device. It will sync when you are back online.");
+    toast.success("Saved. Will sync when online.");
     close();
   };
 
@@ -34,7 +34,9 @@ export function useOfflineSubmit(successMessage: string, close: () => void) {
         if (!online) return await queue(op);
         const result = await executeOp(op);
         if (result.kind === "ok") {
-          toast.success(successMessage);
+          // The message can name what the capture just earned (photos today, the new margin); plain text if that cannot be worked out.
+          const line = typeof successMessage === "string" ? successMessage : await successMessage().catch(() => null);
+          toast.success(line ?? "Saved.");
           close();
           router.refresh();
         } else if (result.kind === "retry") {

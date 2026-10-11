@@ -8,6 +8,9 @@ import { headers } from "next/headers";
 import bcrypt from "bcryptjs";
 import { requireClient, requireSession, requireSub } from "@/lib/auth";
 import { deletePhotoFile } from "@/lib/photos";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { calculateTotals } from "@/lib/calculations";
 import { computeClaim } from "@/lib/claims";
 import { PROJECT_STAGES } from "@/lib/constants";
 import { isLocale } from "@/lib/i18n";
@@ -1875,6 +1878,84 @@ export async function replyToClient(projectId: string, body: string, targetType?
     revalidateAll();
     return { ok: true };
   } catch (error) {
+    return failure(error);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// One-tap capture: context for the + button, and the one-line "what you just gained" confirmations
+// ---------------------------------------------------------------------------
+
+/** What the cost form and the diary need for one project, fetched when the + sheet opens. */
+export async function getCaptureContext(projectId: string): Promise<ActionResult<{ lookups: { boqLines: { id: string; label: string }[]; subcons: { id: string; name: string }[]; claims: { id: string; label: string }[] }; materialCosts: { dateKey: string; description: string }[] }>> {
+  try {
+    await requireSession();
+    const [boq, subcons, costs] = await Promise.all([
+      prisma.boqLine.findMany({ where: { projectId }, orderBy: { position: "asc" } }),
+      prisma.subcontractor.findMany({ orderBy: { name: "asc" } }),
+      prisma.costEntry.findMany({ where: { projectId, category: "MATERIAL" }, orderBy: { date: "desc" }, take: 60 }),
+    ]);
+    return {
+      ok: true,
+      data: {
+        lookups: { boqLines: boq.map((b, i) => ({ id: b.id, label: `${i + 1}. ${b.description}` })), subcons: subcons.map((x) => ({ id: x.id, name: x.name })), claims: [] },
+        materialCosts: costs.map((c) => ({ dateKey: c.date.toISOString().slice(0, 10), description: c.description })),
+      },
+    };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+/** The one line shown after a capture, naming the value it created. Falls back to a plain message if anything is missing. */
+export async function captureSummary(kind: "photo" | "cost", projectId: string): Promise<ActionResult<{ message: string }>> {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) return { ok: false, error: "Please sign in again." };
+    if (kind === "photo") {
+      const dayStart = new Date(`${new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kuala_Lumpur" }).format(new Date())}T00:00:00+08:00`);
+      const n = await prisma.photo.count({ where: { projectId, kind: { in: ["PROGRESS", "TASK", "PUNCH"] }, createdAt: { gte: dayStart } } });
+      return { ok: true, data: { message: `Added to timeline. ${n} ${n === 1 ? "photo" : "photos"} today.` } };
+    }
+    await requireSession();
+    const project = await prisma.project.findUnique({ where: { id: projectId }, include: { costs: { select: { amount: true } }, payments: { select: { amount: true } }, changeOrders: { select: { amount: true, status: true } } } });
+    if (!project) return { ok: false, error: "Project not found." };
+    const totals = calculateTotals({ contractValue: project.contractValue, costs: project.costs, payments: project.payments, changeOrders: project.changeOrders, sstEnabled: project.sstEnabled, sstRate: project.sstRate });
+    if (totals.revisedContractValue <= 0) return { ok: true, data: { message: "Cost added." } };
+    return { ok: true, data: { message: `Project margin is now ${((totals.profitLoss / totals.revisedContractValue) * 100).toFixed(1)}%.` } };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+/** A subcontractor's note on a project they work on. It goes on the timeline under their name. */
+export async function addSubNote(projectId: string, text: unknown, requestId?: string, capturedAtIso?: string): Promise<ActionResult> {
+  const rid = requestIdOf(requestId);
+  try {
+    const { session, subcontractorId } = await requireSub();
+    const note = typeof text === "string" ? text.trim() : "";
+    if (!note) return { ok: false, error: "Write or say something first." };
+    if (note.length > 2000) return { ok: false, error: "That note is too long (2,000 characters at most)." };
+    const works = await prisma.project.findFirst({ where: { id: projectId, OR: [{ tasks: { some: { subcontractorId } } }, { punchItems: { some: { subcontractorId } } }] }, select: { id: true } });
+    if (!works) return { ok: false, error: "That project is not one of yours." };
+    const when = capturedAtIso ? new Date(capturedAtIso) : undefined;
+    await recorded(async (tx) => {
+      if (rid && (await tx.timelineEvent.findUnique({ where: { clientRequestId: rid } }))) return;
+      await appendEvent(tx, {
+        projectId,
+        type: "NOTE",
+        actor: actorFromSession(session),
+        title: "Note from subcontractor",
+        description: note,
+        metadata: { action: "note" },
+        capturedAt: when && !Number.isNaN(when.getTime()) ? when : undefined,
+        clientRequestId: rid,
+      });
+    });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    if (alreadyApplied(error, rid)) return { ok: true };
     return failure(error);
   }
 }

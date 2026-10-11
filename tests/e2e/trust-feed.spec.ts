@@ -26,7 +26,7 @@ test("homeowner trust feed: today, next milestone, decisions, payments and the S
   const photos = page.getByRole("region", { name: "Progress photos" });
   await photos.locator("input[type=file]").setInputFiles(png("rebar.png"));
   await photos.getByRole("button", { name: "Upload photo" }).click();
-  await expect(page.getByText("Photo uploaded")).toBeVisible();
+  await expect(page.getByText(/Added to timeline\. \d+ photos? today\./)).toBeVisible();
   await forClient(page);
   await page.getByRole("region", { name: "Daily log" }).getByRole("button", { name: "+ Add daily log" }).click();
   let dialog = page.getByRole("dialog");

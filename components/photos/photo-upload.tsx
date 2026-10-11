@@ -3,6 +3,7 @@
 import { Camera, MapPin, MapPinOff } from "lucide-react";
 import { toast } from "sonner";
 import { useEffect, useRef, useState } from "react";
+import { captureSummary } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/field";
 import { VoiceInput } from "@/components/ui/voice-input";
@@ -94,7 +95,11 @@ export function PhotoUpload({
     if (input.current) input.current.value = "";
     onDone?.();
   };
-  const { pending, submit } = useOfflineSubmit("Photo uploaded", reset);
+  const { pending, submit } = useOfflineSubmit(async () => {
+    if (!projectId) return "Photo added.";
+    const result = await captureSummary("photo", projectId);
+    return result.ok ? result.data!.message : "Photo added.";
+  }, reset);
   const busy = pending || preparing;
 
   const choose = () => {

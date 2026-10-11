@@ -48,7 +48,7 @@ test.describe("offline", () => {
 
     // Adding a cost does not error and does not block: it is saved on the device.
     const dialog = await addCostThroughDialog(page, "Cement 20 bags", "340.50");
-    await expect(page.getByText("Saved on this device. It will sync when you are back online.")).toBeVisible();
+    await expect(page.getByText("Saved. Will sync when online.")).toBeVisible();
     await expect(dialog).toBeHidden();
     const pending = page.getByTestId("pending-op").filter({ hasText: "Cement 20 bags" });
     await expect(pending).toBeVisible();
@@ -155,7 +155,7 @@ test.describe("offline", () => {
     await expect(sub.page.getByTestId("offline-indicator")).toContainText("Offline — changes will sync when connected.");
     await sub.page.getByLabel(`Photo for ${task}`).setInputFiles(png("cable.png"));
     await sub.page.getByRole("button", { name: "Mark as done" }).click();
-    await expect(sub.page.getByText("Saved on this device. It will sync when you are back online.")).toBeVisible();
+    await expect(sub.page.getByText("Saved. Will sync when online.")).toBeVisible();
     await expect(sub.page.getByTestId("pending-op").filter({ hasText: "with photo" })).toBeVisible();
 
     // Back at the van: it syncs, and the contractor sees it done with the photo.

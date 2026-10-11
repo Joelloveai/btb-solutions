@@ -38,7 +38,6 @@ import { Badge } from "@/components/ui/badge";
 import { MessagesPanel, type MessageRow } from "@/components/client-view/messages-panel";
 import { DiaryPanel, type DiaryRow } from "@/components/diary/diary-panel";
 import type { MaterialCost } from "@/components/diary/diary-form";
-import { AddToTimeline } from "@/components/timeline/capture-sheet";
 import { TimelinePanel } from "@/components/timeline/timeline-panel";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -239,7 +238,6 @@ export function ProjectTabs({
         <PendingOps projectId={projectId} types={["createTask", "completeTask"]} />
         <TasksPanel projectId={projectId} rows={tasks} lookups={lookups} />
       </TabsContent>
-      <AddToTimeline projectId={projectId} lookups={lookups} materialCosts={materialCosts} />
     </Tabs>
   );
 }

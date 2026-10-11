@@ -19,7 +19,7 @@ test("contractor uploads a progress photo with a caption, sees date and time, an
   await progress.locator("input[type=file]").setInputFiles(png("kitchen.png"));
   await progress.getByLabel("Caption (optional)").fill("Kitchen tiling done");
   await progress.getByRole("button", { name: "Upload photo" }).click();
-  await expect(page.getByText("Photo uploaded")).toBeVisible();
+  await expect(page.getByText(/Added to timeline\. \d+ photos? today\./)).toBeVisible();
 
   await expect(progress.getByText("Kitchen tiling done")).toBeVisible();
   await expect(progress.getByText(/\d{2} \w{3} \d{4}.*\d{2}:\d{2}/)).toBeVisible();

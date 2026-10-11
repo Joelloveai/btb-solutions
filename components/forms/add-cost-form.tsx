@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import type { Lookups } from "@/components/projects/lookups";
-import { updateCost } from "@/app/actions";
+import { captureSummary, updateCost } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/field";
 import { VoiceInput } from "@/components/ui/voice-input";
@@ -29,7 +29,10 @@ export function CostFormBody({
   editing?: { id: string; values: CostInput };
 }) {
   const update = useSubmit("Cost updated", close);
-  const add = useOfflineSubmit("Cost added", close);
+  const add = useOfflineSubmit(async () => {
+    const result = await captureSummary("cost", projectId);
+    return result.ok ? result.data!.message : "Cost added.";
+  }, close);
   const pending = editing ? update.pending : add.pending;
   const {
     register,

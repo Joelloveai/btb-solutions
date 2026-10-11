@@ -33,10 +33,10 @@ function setNativeValue(el: HTMLInputElement | HTMLTextAreaElement, value: strin
  * Typing always works; the mic is an extra. Many phones do their recognising on a server,
  * so with no signal it says so and leaves the keyboard to the user.
  */
-type VoiceProps = (InputHTMLAttributes<HTMLInputElement> & { multiline?: false }) | (TextareaHTMLAttributes<HTMLTextAreaElement> & { multiline: true });
+type VoiceProps = ((InputHTMLAttributes<HTMLInputElement> & { multiline?: false }) | (TextareaHTMLAttributes<HTMLTextAreaElement> & { multiline: true })) & { autoStart?: boolean };
 
 export const VoiceInput = forwardRef<HTMLInputElement | HTMLTextAreaElement, VoiceProps>(function VoiceInput(
-  { className, multiline, ...props },
+  { className, multiline, autoStart, ...props },
   ref,
 ) {
   const inner = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
@@ -47,8 +47,27 @@ export const VoiceInput = forwardRef<HTMLInputElement | HTMLTextAreaElement, Voi
     setSupported(recognitionCtor() !== null);
     return () => rec.current?.stop();
   }, []);
+  // Opened from the + button's "Note": start listening straight away, unless the microphone is known to be blocked.
+  useEffect(() => {
+    if (!autoStart) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const state = await navigator.permissions?.query({ name: "microphone" as PermissionName });
+        if (state?.state === "denied") return;
+      } catch {
+        /* permission query not supported: just try */
+      }
+      if (!cancelled && recognitionCtor()) toggle(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Once, when it appears.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  function toggle() {
+  function toggle(silent = false) {
     const el = inner.current;
     const Ctor = recognitionCtor();
     if (!el || !Ctor) return;
@@ -64,6 +83,7 @@ export const VoiceInput = forwardRef<HTMLInputElement | HTMLTextAreaElement, Voi
       if (said) setNativeValue(el, el.value ? `${el.value.trimEnd()} ${said}` : said);
     };
     r.onerror = (e) => {
+      if (silent) return; // started for them: a refusal is not worth a message
       if (e.error === "not-allowed") toast.error("Microphone is blocked. Allow it in the browser settings, or type instead.");
       else if (e.error === "network") toast.error("Voice typing needs signal on this phone. Please type instead.");
       else if (e.error !== "aborted" && e.error !== "no-speech") toast.error("Could not hear that. Please try again or type.");
@@ -105,7 +125,7 @@ export const VoiceInput = forwardRef<HTMLInputElement | HTMLTextAreaElement, Voi
       {supported ? (
         <button
           type="button"
-          onClick={toggle}
+          onClick={() => toggle()}
           aria-label={listening ? "Stop dictation" : "Dictate with microphone"}
           aria-pressed={listening}
           className={cn(
