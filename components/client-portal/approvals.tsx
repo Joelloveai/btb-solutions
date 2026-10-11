@@ -16,7 +16,7 @@ export type ChangeOrderApprovalRow = { id: string; description: string; dateText
 export type SelectionApprovalRow = { id: string; category: string; name: string; details: string | null; photoId: string | null; approvedText: string | null };
 
 /** Ask "are you sure?" first: approving a change order changes the price of the job. */
-function Confirm({ open, title, description, confirmLabel, pending, onCancel, onConfirm }: { open: boolean; title: string; description: string; confirmLabel: string; pending: boolean; onCancel: () => void; onConfirm: () => void }) {
+export function Confirm({ open, title, description, confirmLabel, pending, onCancel, onConfirm }: { open: boolean; title: string; description: string; confirmLabel: string; pending: boolean; onCancel: () => void; onConfirm: () => void }) {
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onCancel()}>
       <DialogContent aria-describedby={undefined}>

@@ -131,7 +131,13 @@ export async function signInSub(browser: Browser, email: string) {
   await v.page.goto("/login");
   await v.page.getByLabel("Email").fill(email);
   await v.page.getByLabel("Password").fill(PASSWORD);
-  await v.page.getByRole("button", { name: "Sign in" }).click();
-  await expect(v.page).toHaveURL(/\/sub\/tasks$/);
+  await v.page.getByRole("button", { name: "Sign in", exact: true }).click();
+  try {
+    await expect(v.page).toHaveURL(/\/sub\/tasks$/, { timeout: 8000 });
+  } catch {
+    // A click before the page has hydrated does nothing: once more.
+    await v.page.getByRole("button", { name: "Sign in", exact: true }).click();
+    await expect(v.page).toHaveURL(/\/sub\/tasks$/);
+  }
   return v;
 }

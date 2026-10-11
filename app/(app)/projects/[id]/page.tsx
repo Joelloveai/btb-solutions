@@ -46,6 +46,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
       selections: { orderBy: { createdAt: "asc" } },
       dailyLogs: { orderBy: [{ date: "desc" }, { createdAt: "desc" }] },
       paymentMilestones: { orderBy: { position: "asc" } },
+      messages: { orderBy: { createdAt: "desc" } },
     },
   });
   if (!project) notFound();
@@ -254,6 +255,21 @@ export default async function ProjectPage({ params }: { params: { id: string } }
       <ProjectTabs
         projectId={project.id}
         timeline={timeline}
+        messages={project.messages.map((m) => ({
+          id: m.id,
+          fromClient: m.authorRole === "client",
+          name: m.authorName,
+          body: m.body,
+          whenText: formatDateTime(m.createdAt, locale),
+          aboutText:
+            m.targetType === "CHANGE_ORDER"
+              ? `change order "${project.changeOrders.find((c) => c.id === m.targetId)?.description ?? "removed"}"`
+              : m.targetType === "SELECTION"
+                ? `selection "${project.selections.find((x) => x.id === m.targetId)?.name ?? "removed"}"`
+                : null,
+          targetType: m.targetType,
+          targetId: m.targetId,
+        }))}
         materialCosts={project.costs.filter((c) => c.category === "MATERIAL").map((c) => ({ dateKey: c.date.toISOString().slice(0, 10), description: c.description }))}
         diaries={diaries.map((d) => ({
           id: d.id,

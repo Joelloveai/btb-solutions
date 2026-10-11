@@ -35,6 +35,7 @@ import { AddChangeOrderForm } from "@/components/forms/add-change-order-form";
 import { AddCostForm } from "@/components/forms/add-cost-form";
 import { AddPaymentForm } from "@/components/forms/add-payment-form";
 import { Badge } from "@/components/ui/badge";
+import { MessagesPanel, type MessageRow } from "@/components/client-view/messages-panel";
 import { DiaryPanel, type DiaryRow } from "@/components/diary/diary-panel";
 import type { MaterialCost } from "@/components/diary/diary-form";
 import { AddToTimeline } from "@/components/timeline/capture-sheet";
@@ -134,6 +135,7 @@ export function ProjectTabs({
   timeline,
   diaries,
   materialCosts,
+  messages,
 }: {
   projectId: string;
   costs: CostRow[];
@@ -154,6 +156,7 @@ export function ProjectTabs({
   timeline: ComponentProps<typeof TimelinePanel>["initial"];
   diaries: DiaryRow[];
   materialCosts: MaterialCost[];
+  messages: MessageRow[];
 }) {
   const t = useT();
   const openPunch = punch.filter((p) => p.status !== "CLOSED").length;
@@ -222,6 +225,7 @@ export function ProjectTabs({
       </TabsContent>
       <TabsContent value="client">
         <ClientViewPanel {...clientView} />
+        <MessagesPanel projectId={projectId} rows={messages} hasClient={clientView.hasClient} />
       </TabsContent>
       <TabsContent value="documents">
         <PendingOps projectId={projectId} types={["uploadDocument"]} />

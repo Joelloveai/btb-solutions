@@ -1801,3 +1801,80 @@ export async function acceptSubInvite(token: string, input: unknown): Promise<Ac
     return failure(error);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Messages between the homeowner and the contractor
+// ---------------------------------------------------------------------------
+
+const messageBody = z.string().trim().min(1, "Write your message first").max(1000, "That message is too long (1,000 characters at most)");
+
+/** "Ask a Question" on a change order or product selection (or a general question). Recorded on the timeline. */
+export async function askClientQuestion(input: { targetType?: "CHANGE_ORDER" | "SELECTION"; targetId?: string; projectId?: string; body: string }): Promise<ActionResult> {
+  try {
+    const { session, clientUser, clientId } = await requireClient();
+    const body = messageBody.safeParse(input.body);
+    if (!body.success) return { ok: false, error: body.error.issues[0].message };
+    let projectId = input.projectId ?? "";
+    let about = "";
+    if (input.targetType === "CHANGE_ORDER" && input.targetId) {
+      const order = await prisma.changeOrder.findUnique({ where: { id: input.targetId }, include: { project: true } });
+      if (!order || order.project.clientId !== clientId || !order.sentToClientAt) return { ok: false, error: "Change order not found." };
+      projectId = order.projectId;
+      about = `change order "${order.description}"`;
+    } else if (input.targetType === "SELECTION" && input.targetId) {
+      const sel = await prisma.selection.findUnique({ where: { id: input.targetId }, include: { project: true } });
+      if (!sel || sel.project.clientId !== clientId) return { ok: false, error: "Selection not found." };
+      projectId = sel.projectId;
+      about = `selection "${sel.name}"`;
+    } else {
+      const project = await prisma.project.findFirst({ where: { id: projectId, clientId } });
+      if (!project) return { ok: false, error: "Project not found." };
+    }
+    const name = clientUser.name ?? clientUser.email;
+    await recorded(async (tx) => {
+      await tx.projectMessage.create({
+        data: { projectId, authorRole: "client", authorId: clientUser.id, authorName: name, body: body.data, targetType: input.targetType ?? null, targetId: input.targetId ?? null },
+      });
+      await appendEvent(tx, {
+        projectId,
+        type: "MESSAGE",
+        actor: { ...actorFromSession(session), name },
+        title: about ? `Client asked a question about ${about}` : "Client sent a message",
+        description: body.data,
+        metadata: { action: "question", targetType: input.targetType ?? null, targetId: input.targetId ?? null },
+      });
+    });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+/** Staff answer the homeowner. The reply shows under the item they asked about, and on the timeline. */
+export async function replyToClient(projectId: string, body: string, targetType?: string, targetId?: string): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    const text = messageBody.safeParse(body);
+    if (!text.success) return { ok: false, error: text.error.issues[0].message };
+    const actor = actorFromSession(session);
+    await recorded(async (tx) => {
+      await tx.projectMessage.create({
+        data: {
+          projectId,
+          authorRole: "staff",
+          authorId: actor.id ?? "",
+          authorName: actor.name ?? "BTB Builders",
+          body: text.data,
+          targetType: targetType === "CHANGE_ORDER" || targetType === "SELECTION" ? targetType : null,
+          targetId: targetType ? targetId ?? null : null,
+        },
+      });
+      await appendEvent(tx, { projectId, type: "MESSAGE", actor, title: "Replied to the client", description: text.data, metadata: { action: "reply", targetType: targetType ?? null, targetId: targetId ?? null } });
+    });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}

@@ -56,6 +56,8 @@ model Project {
   timelineEvents    TimelineEvent[]
   siteDiaries       SiteDiary[]
   evidencePacks     EvidencePack[]
+  messages          ProjectMessage[]
+  clientDigests     ClientDigest[]
 }
 
 model CostEntry {
@@ -482,4 +484,33 @@ model PinThrottle {
   failures    Int       @default(0)
   windowStart DateTime
   lockedUntil DateTime?
+}
+
+/// A question from the homeowner about something put to them (or a general one), and the contractor's replies.
+model ProjectMessage {
+  id         String   @id @default(cuid())
+  projectId  String
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  authorRole String
+  authorId   String
+  authorName String
+  body       String
+  /// CHANGE_ORDER or SELECTION when it is about one of those; empty for a general message.
+  targetType String?
+  targetId   String?
+  createdAt  DateTime @default(now())
+
+  @@index([projectId, createdAt])
+}
+
+/// The Sunday 6pm summary shown to the homeowner. One per project per week, kept so it reads the same later.
+model ClientDigest {
+  id         String   @id @default(cuid())
+  projectId  String
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  weekEnding DateTime
+  body       String
+  createdAt  DateTime @default(now())
+
+  @@unique([projectId, weekEnding])
 }
