@@ -34,6 +34,15 @@ export type ActionResult<T = undefined> =
 const toDate = (value: string) => new Date(`${value}T00:00:00.000Z`);
 const orNull = (value?: string) => (value && value.trim() ? value.trim() : null);
 
+
+/**
+ * Offline-capable clients tag each submission with an id and re-send the SAME id when they retry
+ * (for example after a response was lost). A unique column turns the repeat into a no-op.
+ */
+const requestIdOf = (id?: string) => (id && /^[A-Za-z0-9-]{8,64}$/.test(id) ? id : null);
+const alreadyApplied = (error: unknown, requestId: string | null) =>
+  !!requestId && error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+
 /** Money now flows between pages (claims, receivables, clients, subcons), so refresh them all. */
 const revalidateAll = () => revalidatePath("/", "layout");
 
@@ -124,7 +133,8 @@ export async function setLocale(locale: unknown): Promise<ActionResult> {
   }
 }
 
-export async function addCost(projectId: string, input: unknown): Promise<ActionResult> {
+export async function addCost(projectId: string, input: unknown, requestId?: string): Promise<ActionResult> {
+  const rid = requestIdOf(requestId);
   try {
     await requireSession();
     const parsed = costSchema.safeParse(input);
@@ -141,16 +151,19 @@ export async function addCost(projectId: string, input: unknown): Promise<Action
         reference: orNull(v.reference),
         subcontractorId: v.category === "SUBCON" ? orNull(v.subcontractorId) : null,
         boqLineId: orNull(v.boqLineId),
+        clientRequestId: rid,
       },
     });
     revalidateAll();
     return { ok: true };
   } catch (error) {
+    if (alreadyApplied(error, rid)) return { ok: true };
     return failure(error);
   }
 }
 
-export async function addPayment(projectId: string, input: unknown): Promise<ActionResult> {
+export async function addPayment(projectId: string, input: unknown, requestId?: string): Promise<ActionResult> {
+  const rid = requestIdOf(requestId);
   try {
     await requireSession();
     const parsed = paymentSchema.safeParse(input);
@@ -163,11 +176,13 @@ export async function addPayment(projectId: string, input: unknown): Promise<Act
         amount: v.amount,
         reference: orNull(v.reference),
         claimId: orNull(v.claimId),
+        clientRequestId: rid,
       },
     });
     revalidateAll();
     return { ok: true };
   } catch (error) {
+    if (alreadyApplied(error, rid)) return { ok: true };
     return failure(error);
   }
 }
@@ -692,7 +707,8 @@ export async function linkProjectToClient(projectId: string): Promise<ActionResu
 // Tasks and photos
 // ---------------------------------------------------------------------------
 
-export async function createTask(projectId: string, input: unknown): Promise<ActionResult> {
+export async function createTask(projectId: string, input: unknown, requestId?: string): Promise<ActionResult> {
+  const rid = requestIdOf(requestId);
   try {
     await requireSession();
     const parsed = taskSchema.safeParse(input);
@@ -708,11 +724,13 @@ export async function createTask(projectId: string, input: unknown): Promise<Act
         subcontractorId: v.isMilestone ? null : orNull(v.subcontractorId),
         startDate: v.isMilestone || !v.startDate ? null : toDate(v.startDate),
         dueDate: toDate(v.dueDate),
+        clientRequestId: rid,
       },
     });
     revalidateAll();
     return { ok: true };
   } catch (error) {
+    if (alreadyApplied(error, rid)) return { ok: true };
     return failure(error);
   }
 }
@@ -757,7 +775,8 @@ export async function completeTask(taskId: string, photoId?: string): Promise<Ac
     const { user, subcontractorId } = await requireSub();
     const task = await prisma.task.findUnique({ where: { id: taskId } });
     if (!task || task.subcontractorId !== subcontractorId) return { ok: false, error: "That task is not assigned to you." };
-    if (task.status === "DONE") return { ok: false, error: "This task is already done." };
+    // A retried submission (or a double tap) on a task that is already done is a success, not an error.
+    if (task.status === "DONE") return { ok: true };
 
     if (photoId) {
       const photo = await prisma.photo.findUnique({ where: { id: photoId }, include: { task: true } });

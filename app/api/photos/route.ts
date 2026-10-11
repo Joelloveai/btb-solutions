@@ -33,6 +33,14 @@ export async function POST(request: Request) {
   const mimeType = detectImageType(bytes);
   if (!mimeType) return json({ error: "Only JPEG, PNG or WebP photos are accepted." }, 415);
 
+  const requestIdRaw = String(form.get("requestId") ?? "");
+  const requestId = /^[A-Za-z0-9-]{8,64}$/.test(requestIdRaw) ? requestIdRaw : null;
+  // A retried upload (the first one succeeded but the phone never heard back) must not create a second photo.
+  if (requestId) {
+    const existing = await prisma.photo.findUnique({ where: { clientRequestId: requestId } });
+    if (existing) return json({ id: existing.id }, 200);
+  }
+
   const kind = String(form.get("kind") ?? "PROGRESS");
   const caption = String(form.get("caption") ?? "").trim().slice(0, 200) || null;
 
@@ -54,9 +62,17 @@ export async function POST(request: Request) {
     projectId = project.id;
   }
 
-  const photo = await prisma.photo.create({
-    data: { projectId, kind, caption, mimeType, size: file.size, uploadedById: session?.user?.id ?? null },
-  });
+  let photo;
+  try {
+    photo = await prisma.photo.create({
+      data: { projectId, kind, caption, mimeType, size: file.size, uploadedById: session?.user?.id ?? null, clientRequestId: requestId },
+    });
+  } catch (error) {
+    // Two copies of the same retry racing each other: the loser just returns the winner's photo.
+    const existing = requestId ? await prisma.photo.findUnique({ where: { clientRequestId: requestId } }) : null;
+    if (existing) return json({ id: existing.id }, 200);
+    throw error;
+  }
   try {
     await savePhotoFile(photo, bytes);
   } catch (error) {

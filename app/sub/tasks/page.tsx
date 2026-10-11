@@ -1,3 +1,4 @@
+import { PendingOps } from "@/components/offline/pending-ops";
 import { ImageViewer } from "@/components/photos/image-viewer";
 import { PortalHeader } from "@/components/portal/portal-header";
 import { TaskDoneForm } from "@/components/tasks/task-done-form";
@@ -29,6 +30,8 @@ export default async function SubTasksPage() {
       <p className="mb-4 text-sm text-muted-foreground">
         {sub?.name ?? user.email} · {open.length} open
       </p>
+
+      <PendingOps />
 
       <section aria-label="Open tasks" className="space-y-3">
         {open.length === 0 ? (

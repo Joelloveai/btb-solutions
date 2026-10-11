@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { addPayment, updatePayment } from "@/app/actions";
+import { updatePayment } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import type { Lookups } from "@/components/projects/lookups";
 import { Field, Input, Select } from "@/components/ui/field";
@@ -11,6 +11,7 @@ import { useCallback, useState } from "react";
 import { EditIconButton } from "./row-actions";
 import { todayInputValue } from "@/lib/format";
 import { paymentSchema, type PaymentInput } from "@/lib/validators";
+import { useOfflineSubmit } from "@/components/offline/use-offline-submit";
 import { useSubmit } from "./use-submit";
 
 function Form({
@@ -24,7 +25,9 @@ function Form({
   close: () => void;
   editing?: { id: string; values: PaymentInput };
 }) {
-  const { pending, submit } = useSubmit(editing ? "Payment updated" : "Payment added", close);
+  const update = useSubmit("Payment updated", close);
+  const add = useOfflineSubmit("Payment added", close);
+  const pending = editing ? update.pending : add.pending;
   const {
     register,
     handleSubmit,
@@ -35,7 +38,11 @@ function Form({
   });
 
   return (
-    <form onSubmit={handleSubmit((values) => submit(() => (editing ? updatePayment(editing.id, values) : addPayment(projectId, values))))} className="space-y-3">
+    <form onSubmit={handleSubmit((values) =>
+      editing
+        ? update.submit(() => updatePayment(editing.id, values))
+        : add.submit({ type: "addPayment", projectId, label: `Payment: RM ${values.amount}${values.reference ? ` · ${values.reference}` : ""}`, payload: { input: values } }),
+    )} className="space-y-3">
       <Field label="Date" error={errors.date?.message}>
         <Input {...register("date")} type="date" />
       </Field>

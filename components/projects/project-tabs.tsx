@@ -17,6 +17,7 @@ import { AddBoqLineForm, EditBoqLineButton } from "@/components/forms/boq-line-f
 import { DeleteIconButton } from "@/components/forms/row-actions";
 import { MarkPaidButton } from "@/components/subcons/mark-paid-button";
 import type { Lookups } from "./lookups";
+import { PendingOps } from "@/components/offline/pending-ops";
 import { PhotoGallery, type PhotoItem } from "@/components/photos/photo-gallery";
 import { PhotoUpload } from "@/components/photos/photo-upload";
 import { TasksPanel, type TaskRow } from "@/components/tasks/tasks-panel";
@@ -128,9 +129,11 @@ export function ProjectTabs({
         ))}
       </TabsList>
       <TabsContent value="costs">
+        <PendingOps projectId={projectId} types={["addCost"]} />
         <CostsPanel projectId={projectId} rows={costs} lookups={lookups} />
       </TabsContent>
       <TabsContent value="payments">
+        <PendingOps projectId={projectId} types={["addPayment"]} />
         <PaymentsPanel projectId={projectId} rows={payments} lookups={lookups} />
       </TabsContent>
       <TabsContent value="changes">
@@ -142,6 +145,7 @@ export function ProjectTabs({
       <TabsContent value="photos">
         <div className="space-y-6">
           <section aria-label="Progress photos" className="space-y-3">
+            <PendingOps projectId={projectId} types={["uploadPhoto"]} />
             <PhotoUpload kind="PROGRESS" projectId={projectId} label="Add progress photo" />
             <PhotoGallery photos={photos} canDelete emptyText="No progress photos yet. Photos you add here appear in the client's portal." />
           </section>
@@ -153,6 +157,7 @@ export function ProjectTabs({
         </div>
       </TabsContent>
       <TabsContent value="tasks">
+        <PendingOps projectId={projectId} types={["createTask", "completeTask"]} />
         <TasksPanel projectId={projectId} rows={tasks} lookups={lookups} />
       </TabsContent>
     </Tabs>

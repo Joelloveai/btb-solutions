@@ -1,0 +1,11 @@
+{
+  "name": "BTB Solutions",
+  "short_name": "BTB",
+  "description": "Job costing, site photos and tasks for BTB Builders",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#0f172a",
+  "icons": [{ "src": "/logo.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, useWatch } from "react-hook-form";
 import type { Lookups } from "@/components/projects/lookups";
-import { addCost, updateCost } from "@/app/actions";
+import { updateCost } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/field";
 import { Modal, ModalButton } from "@/components/ui/modal";
@@ -12,6 +12,7 @@ import { EditIconButton } from "./row-actions";
 import { CATEGORY_LABELS, COST_CATEGORIES } from "@/lib/constants";
 import { todayInputValue } from "@/lib/format";
 import { costSchema, type CostInput } from "@/lib/validators";
+import { useOfflineSubmit } from "@/components/offline/use-offline-submit";
 import { useSubmit } from "./use-submit";
 
 function Form({
@@ -25,7 +26,9 @@ function Form({
   close: () => void;
   editing?: { id: string; values: CostInput };
 }) {
-  const { pending, submit } = useSubmit(editing ? "Cost updated" : "Cost added", close);
+  const update = useSubmit("Cost updated", close);
+  const add = useOfflineSubmit("Cost added", close);
+  const pending = editing ? update.pending : add.pending;
   const {
     register,
     control,
@@ -47,7 +50,11 @@ function Form({
   const category = useWatch({ control, name: "category" });
 
   return (
-    <form onSubmit={handleSubmit((values) => submit(() => (editing ? updateCost(editing.id, values) : addCost(projectId, values))))} className="space-y-3">
+    <form onSubmit={handleSubmit((values) =>
+      editing
+        ? update.submit(() => updateCost(editing.id, values))
+        : add.submit({ type: "addCost", projectId, label: `Cost: RM ${values.amount} · ${values.description}`, payload: { input: values } }),
+    )} className="space-y-3">
       <Field label="Date" error={errors.date?.message}>
         <Input {...register("date")} type="date" />
       </Field>

@@ -62,18 +62,22 @@ model CostEntry {
   boqLineId       String?
   boqLine         BoqLine?       @relation(fields: [boqLineId], references: [id], onDelete: SetNull)
   createdAt       DateTime       @default(now())
+  /// Set by offline-capable clients. A retried upload with the same id is recognised and not applied twice.
+  clientRequestId String?        @unique
 }
 
 model Payment {
-  id        String   @id @default(cuid())
-  projectId String
-  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  date      DateTime
-  amount    Decimal
-  reference String?
-  claimId   String?
-  claim     Claim?   @relation(fields: [claimId], references: [id], onDelete: SetNull)
-  createdAt DateTime @default(now())
+  id              String   @id @default(cuid())
+  projectId       String
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  date            DateTime
+  amount          Decimal
+  reference       String?
+  claimId         String?
+  claim           Claim?   @relation(fields: [claimId], references: [id], onDelete: SetNull)
+  createdAt       DateTime @default(now())
+  /// Set by offline-capable clients. A retried upload with the same id is recognised and not applied twice.
+  clientRequestId String?  @unique
 }
 
 model ChangeOrder {
@@ -195,17 +199,19 @@ model ClientUser {
 /// An uploaded image. The file lives on disk (UPLOAD_DIR); only metadata is stored here.
 /// kind: PROGRESS (shown to the client), FLOORPLAN (shown to the client), TASK (subcontractor update, staff only).
 model Photo {
-  id           String   @id @default(cuid())
-  projectId    String
-  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  kind         String   @default("PROGRESS")
-  caption      String?
-  mimeType     String
-  size         Int
-  takenAt      DateTime @default(now())
-  uploadedById String?
-  task         Task?
-  createdAt    DateTime @default(now())
+  id              String   @id @default(cuid())
+  projectId       String
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  kind            String   @default("PROGRESS")
+  caption         String?
+  mimeType        String
+  size            Int
+  takenAt         DateTime @default(now())
+  uploadedById    String?
+  task            Task?
+  createdAt       DateTime @default(now())
+  /// Set by offline-capable clients. A retried upload with the same id is recognised and not applied twice.
+  clientRequestId String?  @unique
 }
 
 /// A job for a subcontractor (or the contractor's own crew when subcontractorId is empty).
@@ -225,4 +231,6 @@ model Task {
   photo           Photo?         @relation(fields: [photoId], references: [id], onDelete: SetNull)
   completedAt     DateTime?
   createdAt       DateTime       @default(now())
+  /// Set by offline-capable clients. A retried upload with the same id is recognised and not applied twice.
+  clientRequestId String?        @unique
 }

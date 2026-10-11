@@ -10,10 +10,11 @@ import { PageHeader } from "@/components/ui/page-header";
 import { ChevronLeft } from "lucide-react";
 import { summarizeProject, type ProjectSummary } from "@/lib/project-summary";
 import { ReleaseRetentionButton } from "@/components/forms/release-retention-form";
-import { PROJECT_STATUS_LABELS, type ProjectStatus } from "@/lib/constants";
+import { CATEGORY_LABELS, PROJECT_STATUS_LABELS, type ProjectStatus } from "@/lib/constants";
 import { formatDate, formatDateTime, formatRM, todayInMalaysia } from "@/lib/format";
 import { reminderLink } from "@/lib/whatsapp";
 import { LoginAccess } from "@/components/portal/login-access";
+import { OfflineSnapshot } from "@/components/offline/offline-snapshot";
 import { getT } from "@/lib/locale";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
@@ -163,6 +164,29 @@ export default async function ProjectPage({ params }: { params: { id: string } }
       ) : null}
 
       <RetentionCard projectId={project.id} status={project.status} summary={summary} money={money} />
+
+      <OfflineSnapshot
+        data={{
+          projectId: project.id,
+          name: project.name,
+          costs: project.costs.slice(0, 100).map((c) => ({
+            id: c.id,
+            dateText: formatDate(c.date, locale),
+            category: CATEGORY_LABELS[c.category as keyof typeof CATEGORY_LABELS] ?? c.category,
+            description: c.description,
+            amountText: money(c.amount.toNumber()),
+          })),
+          payments: project.payments.slice(0, 100).map((p) => ({ id: p.id, dateText: formatDate(p.date, locale), amountText: money(p.amount.toNumber()), reference: p.reference })),
+          tasks: project.tasks.slice(0, 100).map((t) => ({
+            id: t.id,
+            description: t.description,
+            dueText: formatDate(t.dueDate, locale),
+            status: t.status,
+            subcontractorName: t.subcontractor?.name ?? null,
+          })),
+          photos: project.photos.filter((p) => p.kind === "PROGRESS").map(toPhotoItem),
+        }}
+      />
 
       <ProjectTabs
         projectId={project.id}

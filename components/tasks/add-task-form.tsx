@@ -2,8 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, useWatch } from "react-hook-form";
-import { createTask } from "@/app/actions";
-import { useSubmit } from "@/components/forms/use-submit";
+import { useOfflineSubmit } from "@/components/offline/use-offline-submit";
 import type { Lookups } from "@/components/projects/lookups";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/field";
@@ -12,7 +11,7 @@ import { todayInputValue } from "@/lib/format";
 import { taskSchema, type TaskInput } from "@/lib/validators";
 
 function Form({ projectId, lookups, close }: { projectId: string; lookups: Lookups; close: () => void }) {
-  const { pending, submit } = useSubmit("Task added", close);
+  const { pending, submit } = useOfflineSubmit("Task added", close);
   const {
     register,
     control,
@@ -25,7 +24,7 @@ function Form({ projectId, lookups, close }: { projectId: string; lookups: Looku
   const milestone = useWatch({ control, name: "isMilestone" });
 
   return (
-    <form onSubmit={handleSubmit((v) => submit(() => createTask(projectId, v)))} className="space-y-3">
+    <form onSubmit={handleSubmit((v) => submit({ type: "createTask", projectId, label: `Task: ${v.description}`, payload: { input: v } }))} className="space-y-3">
       <Field label="Task or milestone" error={errors.description?.message}>
         <Input {...register("description")} placeholder="e.g. Rewire kitchen" />
       </Field>

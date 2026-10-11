@@ -1,9 +1,9 @@
 "use client";
 
 import { ChevronDown, LogOut, Settings } from "lucide-react";
-import { signOut } from "next-auth/react";
 import Link from "next/link";
 import { useT } from "@/components/locale-provider";
+import { useSafeSignOut } from "@/components/offline/use-safe-sign-out";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,6 +15,7 @@ import {
 
 export function UserMenu({ email }: { email: string }) {
   const t = useT();
+  const safeSignOut = useSafeSignOut();
   const initial = (email[0] ?? "?").toUpperCase();
   return (
     <DropdownMenu>
@@ -36,7 +37,7 @@ export function UserMenu({ email }: { email: string }) {
             {t.settings}
           </Link>
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => signOut({ callbackUrl: "/login" })}>
+        <DropdownMenuItem onSelect={() => void safeSignOut("/login")}>
           <LogOut className="h-4 w-4" aria-hidden="true" />
           {t.logout}
         </DropdownMenuItem>

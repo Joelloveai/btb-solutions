@@ -2,6 +2,7 @@
 
 import { Menu, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { CompanyBar } from "@/components/layout/company-bar";
+import { OfflineIndicator } from "@/components/offline/offline-indicator";
 import { Button } from "@/components/ui/button";
 import { useSidebar } from "./sidebar-context";
 import { UserMenu } from "./user-menu";
@@ -29,6 +30,7 @@ export function AppHeader({ email }: { email: string }) {
         </div>
         <UserMenu email={email} />
       </div>
+      <OfflineIndicator />
     </header>
   );
 }

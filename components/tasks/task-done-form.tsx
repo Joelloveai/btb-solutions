@@ -1,46 +1,33 @@
 "use client";
 
 import { Camera, Check } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
-import { toast } from "sonner";
-import { completeTask } from "@/app/actions";
 import { shrink } from "@/components/photos/shrink";
+import { useOfflineSubmit } from "@/components/offline/use-offline-submit";
 import { Button } from "@/components/ui/button";
+import { toStoredFile } from "@/lib/offline/files";
 
-/** Subcontractor: attach an optional photo and mark the task done. Big, thumb-sized controls. */
+/** Subcontractor: attach an optional photo and mark the task done. Works with no signal: it is saved and sent later. */
 export function TaskDoneForm({ taskId, taskLabel }: { taskId: string; taskLabel: string }) {
-  const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [preparing, setPreparing] = useState(false);
+  const { pending, submit } = useOfflineSubmit("Marked as done. Thank you!", () => setFile(null));
+  const busy = pending || preparing;
 
   const finish = async () => {
-    setBusy(true);
+    setPreparing(true);
     try {
-      let photoId: string | undefined;
-      if (file) {
-        const body = new FormData();
-        body.set("file", await shrink(file), file.name);
-        body.set("kind", "TASK");
-        body.set("taskId", taskId);
-        const response = await fetch("/api/photos", { method: "POST", body });
-        const result = (await response.json().catch(() => ({}))) as { id?: string; error?: string };
-        if (!response.ok || !result.id) {
-          toast.error(result.error ?? "Photo upload failed. Please try again.");
-          return;
-        }
-        photoId = result.id;
-      }
-      const done = await completeTask(taskId, photoId);
-      if (done.ok) {
-        toast.success("Marked as done. Thank you!");
-        router.refresh();
-      } else {
-        toast.error(done.error);
-      }
+      const stored = file ? await toStoredFile(await shrink(file), file.name) : undefined;
+      submit({
+        type: "completeTask",
+        label: `Done: ${taskLabel}${stored ? " (with photo)" : ""}`,
+        payload: { taskId },
+        file: stored,
+        fields: stored ? { kind: "TASK", taskId, capturedAt: new Date(file?.lastModified || Date.now()).toISOString() } : undefined,
+      });
     } finally {
-      setBusy(false);
+      setPreparing(false);
     }
   };
 

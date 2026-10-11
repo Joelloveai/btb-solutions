@@ -1,11 +1,11 @@
 "use client";
 
 import { Camera } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
+import { useOfflineSubmit } from "@/components/offline/use-offline-submit";
+import { toStoredFile } from "@/lib/offline/files";
 import { shrink } from "./shrink";
 
 /**
@@ -18,47 +18,47 @@ export function PhotoUpload({
   taskId,
   label = "Add photo",
   withCaption = true,
-  onUploaded,
 }: {
   kind: "PROGRESS" | "FLOORPLAN" | "TASK";
   projectId?: string;
   taskId?: string;
   label?: string;
   withCaption?: boolean;
-  onUploaded?: (photoId: string) => void;
 }) {
-  const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [caption, setCaption] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [preparing, setPreparing] = useState(false);
+  const reset = () => {
+    setFile(null);
+    setCaption("");
+    if (input.current) input.current.value = "";
+  };
+  const { pending, submit } = useOfflineSubmit("Photo uploaded", reset);
+  const busy = pending || preparing;
 
   const upload = async () => {
     if (!file) return;
-    setBusy(true);
+    setPreparing(true);
     try {
-      const body = new FormData();
-      body.set("file", await shrink(file), file.name);
-      body.set("kind", kind);
-      body.set("caption", caption);
-      if (projectId) body.set("projectId", projectId);
-      if (taskId) body.set("taskId", taskId);
-      const response = await fetch("/api/photos", { method: "POST", body });
-      const result = (await response.json().catch(() => ({}))) as { id?: string; error?: string };
-      if (!response.ok || !result.id) {
-        toast.error(result.error ?? "Upload failed. Please try again.");
-        return;
-      }
-      toast.success("Photo uploaded");
-      setFile(null);
-      setCaption("");
-      if (input.current) input.current.value = "";
-      onUploaded?.(result.id);
-      router.refresh();
-    } catch {
-      toast.error("Upload failed. Check your connection and try again.");
+      const stored = await toStoredFile(await shrink(file), file.name);
+      submit({
+        type: "uploadPhoto",
+        label: `Photo${caption ? `: ${caption}` : ""}`,
+        projectId,
+        payload: {},
+        file: stored,
+        fields: {
+          kind,
+          caption,
+          ...(projectId ? { projectId } : {}),
+          ...(taskId ? { taskId } : {}),
+          // When the photo was taken on this device, not when it reaches the server.
+          capturedAt: new Date(file.lastModified || Date.now()).toISOString(),
+        },
+      });
     } finally {
-      setBusy(false);
+      setPreparing(false);
     }
   };
 
