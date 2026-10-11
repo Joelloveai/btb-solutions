@@ -1,10 +1,12 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { getServerSession } from "next-auth";
 import { authOptions, roleOf } from "@/lib/auth";
 import { parsePhotoMetadata } from "@/lib/photo-metadata";
 import { tradeTagFor } from "@/lib/trade-tag";
 import { MAX_PHOTO_BYTES, deletePhotoFile, detectImageType, savePhotoFile } from "@/lib/photos";
 import { prisma } from "@/lib/prisma";
+import { appendEvent, recorded } from "@/lib/timeline";
+import { actorFromSession } from "@/lib/timeline-actor";
 
 export const dynamic = "force-dynamic";
 
@@ -87,35 +89,56 @@ export async function POST(request: Request) {
     projectId = project.id;
   }
 
-  let photo;
+  // Store the bytes first, so the timeline never records a photo whose file is missing.
+  const id = randomBytes(12).toString("hex");
+  const stored = { id, projectId, mimeType };
   try {
-    photo = await prisma.photo.create({
-      data: {
+    await savePhotoFile(stored, bytes);
+  } catch (error) {
+    console.error(error);
+    await deletePhotoFile(stored).catch(() => undefined);
+    return json({ error: "Could not save the photo. Please try again." }, 500);
+  }
+
+  const m = metadata.data;
+  const trade = m.trade ?? defaultTrade;
+  const where = [m.phase, trade].filter(Boolean).join(" · ");
+  try {
+    await recorded(async (tx) => {
+      await tx.photo.create({
+        data: {
+          id,
+          projectId,
+          kind,
+          caption,
+          mimeType,
+          size: file.size,
+          uploadedById: session?.user?.id ?? null,
+          clientRequestId: requestId,
+          ...m,
+          trade,
+          sha256: createHash("sha256").update(bytes).digest("hex"),
+        },
+      });
+      await appendEvent(tx, {
         projectId,
-        kind,
-        caption,
-        mimeType,
-        size: file.size,
-        uploadedById: session?.user?.id ?? null,
-        clientRequestId: requestId,
-        ...metadata.data,
-        trade: metadata.data.trade ?? defaultTrade,
-        sha256: createHash("sha256").update(bytes).digest("hex"),
-      },
+        type: "PHOTO",
+        actor: actorFromSession(session),
+        title: kind === "PUNCH" ? "Defect photo added" : kind === "TASK" ? "Task photo added" : kind === "FLOORPLAN" ? "Floor plan added" : "Photo added",
+        description: [caption, where].filter(Boolean).join(" — ") || null,
+        metadata: { action: "added", photoId: id, kind, trade, phase: m.phase, sha256: createHash("sha256").update(bytes).digest("hex"), gpsAccuracy: m.accuracy },
+        latitude: m.latitude,
+        longitude: m.longitude,
+        capturedAt: m.capturedAt ?? undefined,
+      });
     });
   } catch (error) {
+    await deletePhotoFile(stored).catch(() => undefined);
     // Two copies of the same retry racing each other: the loser just returns the winner's photo.
     const existing = requestId ? await prisma.photo.findUnique({ where: { clientRequestId: requestId } }) : null;
     if (existing) return json({ id: existing.id }, 200);
-    throw error;
-  }
-  try {
-    await savePhotoFile(photo, bytes);
-  } catch (error) {
     console.error(error);
-    await prisma.photo.delete({ where: { id: photo.id } }).catch(() => undefined);
-    await deletePhotoFile(photo).catch(() => undefined);
     return json({ error: "Could not save the photo. Please try again." }, 500);
   }
-  return json({ id: photo.id }, 201);
+  return json({ id }, 201);
 }

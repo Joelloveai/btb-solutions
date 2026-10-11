@@ -10,6 +10,8 @@ import { computeClaim } from "@/lib/claims";
 import { PROJECT_STAGES } from "@/lib/constants";
 import { isLocale } from "@/lib/i18n";
 import { prisma } from "@/lib/prisma";
+import { appendEvent, recorded, rm } from "@/lib/timeline";
+import { actorFromSession } from "@/lib/timeline-actor";
 import { calculateQuote } from "@/lib/quotes";
 import {
   boqLineSchema,
@@ -142,23 +144,33 @@ export async function setLocale(locale: unknown): Promise<ActionResult> {
 export async function addCost(projectId: string, input: unknown, requestId?: string): Promise<ActionResult> {
   const rid = requestIdOf(requestId);
   try {
-    await requireSession();
+    const session = await requireSession();
     const parsed = costSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
     const v = parsed.data;
-    await prisma.costEntry.create({
-      data: {
+    await recorded(async (tx) => {
+      const cost = await tx.costEntry.create({
+        data: {
+          projectId,
+          date: toDate(v.date),
+          category: v.category,
+          description: v.description,
+          amount: v.amount,
+          vendor: orNull(v.vendor),
+          reference: orNull(v.reference),
+          subcontractorId: v.category === "SUBCON" ? orNull(v.subcontractorId) : null,
+          boqLineId: orNull(v.boqLineId),
+          clientRequestId: rid,
+        },
+      });
+      await appendEvent(tx, {
         projectId,
-        date: toDate(v.date),
-        category: v.category,
+        type: "COST",
+        actor: actorFromSession(session),
+        title: `Cost added: ${rm(v.amount)}`,
         description: v.description,
-        amount: v.amount,
-        vendor: orNull(v.vendor),
-        reference: orNull(v.reference),
-        subcontractorId: v.category === "SUBCON" ? orNull(v.subcontractorId) : null,
-        boqLineId: orNull(v.boqLineId),
-        clientRequestId: rid,
-      },
+        metadata: { action: "added", costId: cost.id, amount: cost.amount.toFixed(2), category: v.category, reference: orNull(v.reference) },
+      });
     });
     revalidateAll();
     return { ok: true };
@@ -171,19 +183,29 @@ export async function addCost(projectId: string, input: unknown, requestId?: str
 export async function addPayment(projectId: string, input: unknown, requestId?: string): Promise<ActionResult> {
   const rid = requestIdOf(requestId);
   try {
-    await requireSession();
+    const session = await requireSession();
     const parsed = paymentSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
     const v = parsed.data;
-    await prisma.payment.create({
-      data: {
+    await recorded(async (tx) => {
+      const payment = await tx.payment.create({
+        data: {
+          projectId,
+          date: toDate(v.date),
+          amount: v.amount,
+          reference: orNull(v.reference),
+          claimId: orNull(v.claimId),
+          clientRequestId: rid,
+        },
+      });
+      await appendEvent(tx, {
         projectId,
-        date: toDate(v.date),
-        amount: v.amount,
-        reference: orNull(v.reference),
-        claimId: orNull(v.claimId),
-        clientRequestId: rid,
-      },
+        type: "PAYMENT",
+        actor: actorFromSession(session),
+        title: `Payment received: ${rm(v.amount)}`,
+        description: orNull(v.reference),
+        metadata: { action: "added", paymentId: payment.id, amount: payment.amount.toFixed(2), claimId: orNull(v.claimId) },
+      });
     });
     revalidateAll();
     return { ok: true };
@@ -195,19 +217,29 @@ export async function addPayment(projectId: string, input: unknown, requestId?: 
 
 export async function addChangeOrder(projectId: string, input: unknown): Promise<ActionResult> {
   try {
-    await requireSession();
+    const session = await requireSession();
     const parsed = changeOrderSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
     const v = parsed.data;
-    await prisma.changeOrder.create({
-      data: {
+    await recorded(async (tx) => {
+      const order = await tx.changeOrder.create({
+        data: {
+          projectId,
+          date: toDate(v.date),
+          description: v.description,
+          amount: v.amount,
+          status: "PENDING",
+          boqLineId: orNull(v.boqLineId),
+        },
+      });
+      await appendEvent(tx, {
         projectId,
-        date: toDate(v.date),
+        type: "CHANGE_ORDER",
+        actor: actorFromSession(session),
+        title: `Change order raised: ${rm(v.amount)}`,
         description: v.description,
-        amount: v.amount,
-        status: "PENDING",
-        boqLineId: orNull(v.boqLineId),
-      },
+        metadata: { action: "added", changeOrderId: order.id, amount: order.amount.toFixed(2) },
+      });
     });
     revalidateAll();
     return { ok: true };
@@ -221,15 +253,25 @@ export async function setChangeOrderStatus(
   status: unknown,
 ): Promise<ActionResult> {
   try {
-    await requireSession();
+    const session = await requireSession();
     const parsed = changeOrderStatusSchema.safeParse(status);
     if (!parsed.success) return { ok: false, error: "Unknown status" };
-    const updated = await prisma.changeOrder.update({
-      where: { id: changeOrderId },
-      data: {
-        status: parsed.data,
-        approvedAt: parsed.data === "APPROVED" ? new Date() : null,
-      },
+    await recorded(async (tx) => {
+      const updated = await tx.changeOrder.update({
+        where: { id: changeOrderId },
+        data: {
+          status: parsed.data,
+          approvedAt: parsed.data === "APPROVED" ? new Date() : null,
+        },
+      });
+      await appendEvent(tx, {
+        projectId: updated.projectId,
+        type: "CHANGE_ORDER",
+        actor: actorFromSession(session),
+        title: `Change order ${parsed.data.toLowerCase()}: ${rm(updated.amount)}`,
+        description: updated.description,
+        metadata: { action: "status", changeOrderId, status: parsed.data },
+      });
     });
     revalidateAll();
     return { ok: true };
@@ -238,10 +280,27 @@ export async function setChangeOrderStatus(
   }
 }
 
-async function mutateRow<T extends { projectId: string }>(run: () => Promise<T>): Promise<ActionResult> {
+/**
+ * Edit or remove a money row. The change and its timeline event commit together; a removed or edited row is
+ * never erased from the timeline, it is followed by a new event that says what changed.
+ */
+async function mutateRow<T extends { projectId: string }>(
+  run: (tx: Prisma.TransactionClient) => Promise<T>,
+  record: { type: "COST" | "PAYMENT" | "CHANGE_ORDER"; action: "updated" | "deleted"; title: (row: T) => string; description?: (row: T) => string | null },
+): Promise<ActionResult> {
   try {
-    await requireSession();
-    const row = await run();
+    const session = await requireSession();
+    await recorded(async (tx) => {
+      const row = await run(tx);
+      await appendEvent(tx, {
+        projectId: row.projectId,
+        type: record.type,
+        actor: actorFromSession(session),
+        title: record.title(row),
+        description: record.description?.(row) ?? null,
+        metadata: { action: record.action, rowId: (row as unknown as { id?: string }).id ?? null },
+      });
+    });
     revalidateAll();
     return { ok: true };
   } catch (error) {
@@ -253,8 +312,8 @@ export async function updateCost(id: string, input: unknown): Promise<ActionResu
   const parsed = costSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
   const v = parsed.data;
-  return mutateRow(() =>
-    prisma.costEntry.update({
+  return mutateRow((tx) =>
+    tx.costEntry.update({
       where: { id },
       data: {
         date: toDate(v.date),
@@ -268,6 +327,7 @@ export async function updateCost(id: string, input: unknown): Promise<ActionResu
         ...(v.category === "SUBCON" ? {} : { paidAt: null }),
       },
     }),
+    { type: "COST", action: "updated", title: (r) => `Cost corrected: ${rm(r.amount)}`, description: (r) => r.description },
   );
 }
 
@@ -275,11 +335,13 @@ export async function updatePayment(id: string, input: unknown): Promise<ActionR
   const parsed = paymentSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
   const v = parsed.data;
-  return mutateRow(() =>
-    prisma.payment.update({
-      where: { id },
-      data: { date: toDate(v.date), amount: v.amount, reference: orNull(v.reference), claimId: orNull(v.claimId) },
-    }),
+  return mutateRow(
+    (tx) =>
+      tx.payment.update({
+        where: { id },
+        data: { date: toDate(v.date), amount: v.amount, reference: orNull(v.reference), claimId: orNull(v.claimId) },
+      }),
+    { type: "PAYMENT", action: "updated", title: (r) => `Payment corrected: ${rm(r.amount)}`, description: (r) => r.reference },
   );
 }
 
@@ -287,24 +349,41 @@ export async function updateChangeOrder(id: string, input: unknown): Promise<Act
   const parsed = changeOrderSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
   const v = parsed.data;
-  return mutateRow(() =>
-    prisma.changeOrder.update({
-      where: { id },
-      data: { date: toDate(v.date), description: v.description, amount: v.amount, boqLineId: orNull(v.boqLineId) },
-    }),
+  return mutateRow(
+    (tx) =>
+      tx.changeOrder.update({
+        where: { id },
+        data: { date: toDate(v.date), description: v.description, amount: v.amount, boqLineId: orNull(v.boqLineId) },
+      }),
+    { type: "CHANGE_ORDER", action: "updated", title: (r) => `Change order corrected: ${rm(r.amount)}`, description: (r) => r.description },
   );
 }
 
 export async function deleteCost(id: string): Promise<ActionResult> {
-  return mutateRow(() => prisma.costEntry.delete({ where: { id } }));
+  return mutateRow((tx) => tx.costEntry.delete({ where: { id } }), {
+    type: "COST",
+    action: "deleted",
+    title: (r) => `Cost removed: ${rm(r.amount)}`,
+    description: (r) => r.description,
+  });
 }
 
 export async function deletePayment(id: string): Promise<ActionResult> {
-  return mutateRow(() => prisma.payment.delete({ where: { id } }));
+  return mutateRow((tx) => tx.payment.delete({ where: { id } }), {
+    type: "PAYMENT",
+    action: "deleted",
+    title: (r) => `Payment removed: ${rm(r.amount)}`,
+    description: (r) => r.reference,
+  });
 }
 
 export async function deleteChangeOrder(id: string): Promise<ActionResult> {
-  return mutateRow(() => prisma.changeOrder.delete({ where: { id } }));
+  return mutateRow((tx) => tx.changeOrder.delete({ where: { id } }), {
+    type: "CHANGE_ORDER",
+    action: "deleted",
+    title: (r) => `Change order removed: ${rm(r.amount)}`,
+    description: (r) => r.description,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -496,11 +575,11 @@ export async function deleteBoqLine(id: string): Promise<ActionResult> {
 
 export async function issueClaim(projectId: string, input: unknown): Promise<ActionResult<{ id: string }>> {
   try {
-    await requireSession();
+    const session = await requireSession();
     const parsed = claimSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
     const v = parsed.data;
-    const claim = await prisma.$transaction(async (tx) => {
+    const claim = await recorded(async (tx) => {
       const project = await tx.project.findUniqueOrThrow({
         where: { id: projectId },
         include: { claims: true, changeOrders: true },
@@ -525,7 +604,7 @@ export async function issueClaim(projectId: string, input: unknown): Promise<Act
         where: { id: projectId },
         data: { lastClaimNumber: { increment: 1 } },
       });
-      return tx.claim.create({
+      const created = await tx.claim.create({
         data: {
           projectId,
           number: bumped.lastClaimNumber,
@@ -539,6 +618,15 @@ export async function issueClaim(projectId: string, input: unknown): Promise<Act
           netClaim: figures.netClaim.toFixed(2),
         },
       });
+      await appendEvent(tx, {
+        projectId,
+        type: "CLAIM",
+        actor: actorFromSession(session),
+        title: `Progress claim ${created.number} issued: ${rm(created.amountClaimed)}`,
+        description: `Work done to date ${rm(created.workDone)}`,
+        metadata: { action: "issued", claimId: created.id, number: created.number, workDone: created.workDone.toFixed(2), amountClaimed: created.amountClaimed.toFixed(2) },
+      });
+      return created;
     });
     revalidateAll();
     return { ok: true, data: { id: claim.id } };
@@ -553,14 +641,21 @@ export async function issueClaim(projectId: string, input: unknown): Promise<Act
 /** Only the latest claim, and only while nothing has been paid against it, can be taken back. */
 export async function deleteClaim(id: string): Promise<ActionResult> {
   try {
-    await requireSession();
-    await prisma.$transaction(async (tx) => {
+    const session = await requireSession();
+    await recorded(async (tx) => {
       const claim = await tx.claim.findUniqueOrThrow({ where: { id }, include: { payments: true } });
       const project = await tx.project.findUniqueOrThrow({ where: { id: claim.projectId } });
       if (claim.number !== project.lastClaimNumber) throw new Error("claim: only the latest claim can be deleted.");
       if (claim.payments.length > 0) throw new Error("claim: this claim has payments recorded against it.");
       await tx.claim.delete({ where: { id } });
       await tx.project.update({ where: { id: project.id }, data: { lastClaimNumber: { decrement: 1 } } });
+      await appendEvent(tx, {
+        projectId: project.id,
+        type: "CLAIM",
+        actor: actorFromSession(session),
+        title: `Progress claim ${claim.number} withdrawn: ${rm(claim.amountClaimed)}`,
+        metadata: { action: "deleted", claimId: id, number: claim.number },
+      });
     });
     revalidateAll();
     return { ok: true };
@@ -575,19 +670,26 @@ export async function deleteClaim(id: string): Promise<ActionResult> {
 /** Records the retention money arriving: a payment on the project plus a running released total. */
 export async function releaseRetention(projectId: string, input: unknown): Promise<ActionResult> {
   try {
-    await requireSession();
+    const session = await requireSession();
     const parsed = releaseRetentionSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
     const v = parsed.data;
-    await prisma.$transaction(async (tx) => {
+    await recorded(async (tx) => {
       const project = await tx.project.findUniqueOrThrow({ where: { id: projectId }, include: { claims: true } });
       const held = project.claims.reduce((t, c) => t.plus(c.retentionAmount), new Prisma.Decimal(0));
       const outstanding = held.minus(project.retentionReleased);
       if (new Prisma.Decimal(v.amount).greaterThan(outstanding)) {
         throw new Error(`release: only RM ${outstanding.toFixed(2)} of retention is outstanding.`);
       }
-      await tx.payment.create({
+      const released = await tx.payment.create({
         data: { projectId, date: toDate(v.date), amount: v.amount, reference: "Retention release" },
+      });
+      await appendEvent(tx, {
+        projectId,
+        type: "PAYMENT",
+        actor: actorFromSession(session),
+        title: `Retention released: ${rm(v.amount)}`,
+        metadata: { action: "added", paymentId: released.id, amount: released.amount.toFixed(2), retention: true },
       });
       await tx.project.update({ where: { id: projectId }, data: { retentionReleased: { increment: v.amount } } });
     });
@@ -716,22 +818,32 @@ export async function linkProjectToClient(projectId: string): Promise<ActionResu
 export async function createTask(projectId: string, input: unknown, requestId?: string): Promise<ActionResult> {
   const rid = requestIdOf(requestId);
   try {
-    await requireSession();
+    const session = await requireSession();
     const parsed = taskSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
     const v = parsed.data;
     if (v.startDate && v.startDate > v.dueDate) return { ok: false, error: "The start date cannot be after the due date." };
-    await prisma.task.create({
-      data: {
+    await recorded(async (tx) => {
+      const task = await tx.task.create({
+        data: {
+          projectId,
+          description: v.description,
+          isMilestone: v.isMilestone,
+          // A milestone is a single date with no assignee and no start.
+          subcontractorId: v.isMilestone ? null : orNull(v.subcontractorId),
+          startDate: v.isMilestone || !v.startDate ? null : toDate(v.startDate),
+          dueDate: toDate(v.dueDate),
+          clientRequestId: rid,
+        },
+      });
+      await appendEvent(tx, {
         projectId,
+        type: "TASK_CREATED",
+        actor: actorFromSession(session),
+        title: v.isMilestone ? "Milestone set" : "Task assigned",
         description: v.description,
-        isMilestone: v.isMilestone,
-        // A milestone is a single date with no assignee and no start.
-        subcontractorId: v.isMilestone ? null : orNull(v.subcontractorId),
-        startDate: v.isMilestone || !v.startDate ? null : toDate(v.startDate),
-        dueDate: toDate(v.dueDate),
-        clientRequestId: rid,
-      },
+        metadata: { action: "added", taskId: task.id, dueDate: v.dueDate, milestone: v.isMilestone },
+      });
     });
     revalidateAll();
     return { ok: true };
@@ -743,11 +855,21 @@ export async function createTask(projectId: string, input: unknown, requestId?: 
 
 export async function setTaskStatus(id: string, status: unknown): Promise<ActionResult> {
   try {
-    await requireSession();
+    const session = await requireSession();
     if (status !== "OPEN" && status !== "DONE") return { ok: false, error: "Unknown status" };
-    await prisma.task.update({
-      where: { id },
-      data: { status, completedAt: status === "DONE" ? new Date() : null },
+    await recorded(async (tx) => {
+      const task = await tx.task.update({
+        where: { id },
+        data: { status, completedAt: status === "DONE" ? new Date() : null },
+      });
+      await appendEvent(tx, {
+        projectId: task.projectId,
+        type: status === "DONE" ? "TASK_COMPLETED" : "TASK_CREATED",
+        actor: actorFromSession(session),
+        title: status === "DONE" ? "Task completed" : "Task reopened",
+        description: task.description,
+        metadata: { action: status === "DONE" ? "completed" : "reopened", taskId: id },
+      });
     });
     revalidateAll();
     return { ok: true };
@@ -758,9 +880,21 @@ export async function setTaskStatus(id: string, status: unknown): Promise<Action
 
 export async function deleteTask(id: string): Promise<ActionResult> {
   try {
-    await requireSession();
+    const session = await requireSession();
     const task = await prisma.task.findUnique({ where: { id } });
-    await prisma.task.delete({ where: { id } });
+    await recorded(async (tx) => {
+      await tx.task.delete({ where: { id } });
+      if (task) {
+        await appendEvent(tx, {
+          projectId: task.projectId,
+          type: "TASK_CREATED",
+          actor: actorFromSession(session),
+          title: "Task removed",
+          description: task.description,
+          metadata: { action: "deleted", taskId: id },
+        });
+      }
+    });
     if (task?.photoId) {
       const photo = await prisma.photo.findUnique({ where: { id: task.photoId } });
       if (photo) {
@@ -778,7 +912,7 @@ export async function deleteTask(id: string): Promise<ActionResult> {
 /** The subcontractor marks one of THEIR tasks done, optionally attaching the photo they just uploaded. */
 export async function completeTask(taskId: string, photoId?: string): Promise<ActionResult> {
   try {
-    const { user, subcontractorId } = await requireSub();
+    const { session, user, subcontractorId } = await requireSub();
     const task = await prisma.task.findUnique({ where: { id: taskId } });
     if (!task || task.subcontractorId !== subcontractorId) return { ok: false, error: "That task is not assigned to you." };
     // A retried submission (or a double tap) on a task that is already done is a success, not an error.
@@ -791,9 +925,19 @@ export async function completeTask(taskId: string, photoId?: string): Promise<Ac
         return { ok: false, error: "That photo cannot be attached." };
       }
     }
-    await prisma.task.update({
-      where: { id: taskId },
-      data: { status: "DONE", completedAt: new Date(), photoId: photoId || null },
+    await recorded(async (tx) => {
+      await tx.task.update({
+        where: { id: taskId },
+        data: { status: "DONE", completedAt: new Date(), photoId: photoId || null },
+      });
+      await appendEvent(tx, {
+        projectId: task.projectId,
+        type: "TASK_COMPLETED",
+        actor: actorFromSession(session),
+        title: "Task completed",
+        description: task.description,
+        metadata: { action: "completed", taskId, photoId: photoId || null },
+      });
     });
     revalidateAll();
     return { ok: true };
@@ -804,10 +948,20 @@ export async function completeTask(taskId: string, photoId?: string): Promise<Ac
 
 export async function deletePhoto(id: string): Promise<ActionResult> {
   try {
-    await requireSession();
+    const session = await requireSession();
     const photo = await prisma.photo.findUnique({ where: { id } });
     if (!photo) return { ok: true };
-    await prisma.photo.delete({ where: { id } });
+    await recorded(async (tx) => {
+      await tx.photo.delete({ where: { id } });
+      await appendEvent(tx, {
+        projectId: photo.projectId,
+        type: "PHOTO",
+        actor: actorFromSession(session),
+        title: "Photo removed",
+        description: photo.caption,
+        metadata: { action: "deleted", photoId: id, sha256: photo.sha256 },
+      });
+    });
     await deletePhotoFile(photo).catch(() => undefined);
     revalidateAll();
     return { ok: true };
@@ -889,7 +1043,7 @@ export async function deleteSubcontractorUser(id: string): Promise<ActionResult>
 export async function createPunchItem(projectId: string, input: unknown, requestId?: string, photoId?: string): Promise<ActionResult> {
   const rid = requestIdOf(requestId);
   try {
-    await requireSession();
+    const session = await requireSession();
     const parsed = punchSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
     const v = parsed.data;
@@ -899,17 +1053,27 @@ export async function createPunchItem(projectId: string, input: unknown, request
         return { ok: false, error: "That photo cannot be attached." };
       }
     }
-    await prisma.punchItem.create({
-      data: {
+    await recorded(async (tx) => {
+      const item = await tx.punchItem.create({
+        data: {
+          projectId,
+          location: v.location,
+          description: v.description,
+          trade: v.trade,
+          subcontractorId: orNull(v.subcontractorId),
+          dueDate: v.dueDate ? toDate(v.dueDate) : null,
+          photoId: photoId || null,
+          clientRequestId: rid,
+        },
+      });
+      await appendEvent(tx, {
         projectId,
-        location: v.location,
+        type: "PUNCH_CREATED",
+        actor: actorFromSession(session),
+        title: `Defect raised at ${v.location}`,
         description: v.description,
-        trade: v.trade,
-        subcontractorId: orNull(v.subcontractorId),
-        dueDate: v.dueDate ? toDate(v.dueDate) : null,
-        photoId: photoId || null,
-        clientRequestId: rid,
-      },
+        metadata: { action: "added", punchId: item.id, trade: v.trade, photoId: photoId || null },
+      });
     });
     revalidateAll();
     return { ok: true };
@@ -921,8 +1085,18 @@ export async function createPunchItem(projectId: string, input: unknown, request
 
 export async function assignPunchItem(id: string, subcontractorId: string): Promise<ActionResult> {
   try {
-    await requireSession();
-    await prisma.punchItem.update({ where: { id }, data: { subcontractorId: orNull(subcontractorId) } });
+    const session = await requireSession();
+    await recorded(async (tx) => {
+      const item = await tx.punchItem.update({ where: { id }, data: { subcontractorId: orNull(subcontractorId) } });
+      await appendEvent(tx, {
+        projectId: item.projectId,
+        type: "PUNCH_CREATED",
+        actor: actorFromSession(session),
+        title: "Defect assigned",
+        description: `${item.location}: ${item.description}`,
+        metadata: { action: "assigned", punchId: id, subcontractorId: orNull(subcontractorId) },
+      });
+    });
     revalidateAll();
     return { ok: true };
   } catch (error) {
@@ -933,7 +1107,7 @@ export async function assignPunchItem(id: string, subcontractorId: string): Prom
 /** The subcontractor says it is fixed, with a photo of the fix. A repeat (retry, double tap) is a success. */
 export async function resolvePunchItem(id: string, photoId?: string): Promise<ActionResult> {
   try {
-    const { user, subcontractorId } = await requireSub();
+    const { session, user, subcontractorId } = await requireSub();
     const item = await prisma.punchItem.findUnique({ where: { id } });
     if (!item || item.subcontractorId !== subcontractorId) return { ok: false, error: "That item is not assigned to you." };
     if (item.status !== "OPEN") return { ok: true };
@@ -943,7 +1117,17 @@ export async function resolvePunchItem(id: string, photoId?: string): Promise<Ac
         return { ok: false, error: "That photo cannot be attached." };
       }
     }
-    await prisma.punchItem.update({ where: { id }, data: { status: "DONE", resolvedAt: new Date(), resolvedPhotoId: photoId || null } });
+    await recorded(async (tx) => {
+      await tx.punchItem.update({ where: { id }, data: { status: "DONE", resolvedAt: new Date(), resolvedPhotoId: photoId || null } });
+      await appendEvent(tx, {
+        projectId: item.projectId,
+        type: "PUNCH_RESOLVED",
+        actor: actorFromSession(session),
+        title: `Defect fixed at ${item.location}`,
+        description: item.description,
+        metadata: { action: "resolved", punchId: id, photoId: photoId || null },
+      });
+    });
     revalidateAll();
     return { ok: true };
   } catch (error) {
@@ -954,8 +1138,18 @@ export async function resolvePunchItem(id: string, photoId?: string): Promise<Ac
 /** The contractor has looked at the fix and is satisfied. */
 export async function closePunchItem(id: string): Promise<ActionResult> {
   try {
-    await requireSession();
-    await prisma.punchItem.update({ where: { id }, data: { status: "CLOSED", closedAt: new Date() } });
+    const session = await requireSession();
+    await recorded(async (tx) => {
+      const item = await tx.punchItem.update({ where: { id }, data: { status: "CLOSED", closedAt: new Date() } });
+      await appendEvent(tx, {
+        projectId: item.projectId,
+        type: "PUNCH_RESOLVED",
+        actor: actorFromSession(session),
+        title: `Defect verified and closed at ${item.location}`,
+        description: item.description,
+        metadata: { action: "closed", punchId: id },
+      });
+    });
     revalidateAll();
     return { ok: true };
   } catch (error) {
@@ -966,8 +1160,18 @@ export async function closePunchItem(id: string): Promise<ActionResult> {
 /** The fix was not good enough: back to the subcontractor. */
 export async function reopenPunchItem(id: string): Promise<ActionResult> {
   try {
-    await requireSession();
-    await prisma.punchItem.update({ where: { id }, data: { status: "OPEN", resolvedAt: null, closedAt: null, resolvedPhotoId: null } });
+    const session = await requireSession();
+    await recorded(async (tx) => {
+      const item = await tx.punchItem.update({ where: { id }, data: { status: "OPEN", resolvedAt: null, closedAt: null, resolvedPhotoId: null } });
+      await appendEvent(tx, {
+        projectId: item.projectId,
+        type: "PUNCH_CREATED",
+        actor: actorFromSession(session),
+        title: `Fix rejected at ${item.location}; sent back`,
+        description: item.description,
+        metadata: { action: "reopened", punchId: id },
+      });
+    });
     revalidateAll();
     return { ok: true };
   } catch (error) {
@@ -977,9 +1181,21 @@ export async function reopenPunchItem(id: string): Promise<ActionResult> {
 
 export async function deletePunchItem(id: string): Promise<ActionResult> {
   try {
-    await requireSession();
+    const session = await requireSession();
     const item = await prisma.punchItem.findUnique({ where: { id } });
-    await prisma.punchItem.delete({ where: { id } });
+    await recorded(async (tx) => {
+      await tx.punchItem.delete({ where: { id } });
+      if (item) {
+        await appendEvent(tx, {
+          projectId: item.projectId,
+          type: "PUNCH_CREATED",
+          actor: actorFromSession(session),
+          title: `Defect removed at ${item.location}`,
+          description: item.description,
+          metadata: { action: "deleted", punchId: id },
+        });
+      }
+    });
     for (const photoId of [item?.photoId, item?.resolvedPhotoId]) {
       if (!photoId) continue;
       const photo = await prisma.photo.findUnique({ where: { id: photoId } });
@@ -1027,12 +1243,24 @@ export async function deleteDocumentVersion(id: string): Promise<ActionResult> {
 /** Put a pending change order in front of the client for their decision. Clients never see drafts. */
 export async function sendChangeOrderToClient(id: string): Promise<ActionResult> {
   try {
-    await requireSession();
+    const session = await requireSession();
     const order = await prisma.changeOrder.findUnique({ where: { id }, include: { project: true } });
     if (!order) return { ok: false, error: "Change order not found." };
     if (!order.project.clientId) return { ok: false, error: "Link this project to a client first." };
     if (order.status !== "PENDING") return { ok: false, error: "Only a pending change order can be sent for approval." };
-    await prisma.changeOrder.update({ where: { id }, data: { sentToClientAt: order.sentToClientAt ?? new Date() } });
+    await recorded(async (tx) => {
+      await tx.changeOrder.update({ where: { id }, data: { sentToClientAt: order.sentToClientAt ?? new Date() } });
+      if (!order.sentToClientAt) {
+        await appendEvent(tx, {
+          projectId: order.projectId,
+          type: "CHANGE_ORDER",
+          actor: actorFromSession(session),
+          title: `Change order sent to client: ${rm(order.amount)}`,
+          description: order.description,
+          metadata: { action: "sent", changeOrderId: id },
+        });
+      }
+    });
     revalidateAll();
     return { ok: true };
   } catch (error) {
@@ -1040,11 +1268,53 @@ export async function sendChangeOrderToClient(id: string): Promise<ActionResult>
   }
 }
 
+/** A note typed or dictated in the field. It goes straight onto the timeline, stamped with when it was written. */
+export async function addNote(projectId: string, text: unknown, requestId?: string, capturedAtIso?: string): Promise<ActionResult> {
+  const rid = requestIdOf(requestId);
+  try {
+    const session = await requireSession();
+    const note = typeof text === "string" ? text.trim() : "";
+    if (!note) return { ok: false, error: "Write or say something first." };
+    if (note.length > 2000) return { ok: false, error: "That note is too long (2,000 characters at most)." };
+    const when = capturedAtIso ? new Date(capturedAtIso) : undefined;
+    await recorded(async (tx) => {
+      if (rid && (await tx.timelineEvent.findUnique({ where: { clientRequestId: rid } }))) return;
+      await appendEvent(tx, {
+        projectId,
+        type: "NOTE",
+        actor: actorFromSession(session),
+        title: "Note",
+        description: note,
+        metadata: { action: "note" },
+        capturedAt: when && !Number.isNaN(when.getTime()) ? when : undefined,
+        clientRequestId: rid,
+      });
+    });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    if (alreadyApplied(error, rid)) return { ok: true };
+    return failure(error);
+  }
+}
+
 export async function setProjectStage(projectId: string, stage: string): Promise<ActionResult> {
   try {
-    await requireSession();
+    const session = await requireSession();
     if (stage !== "" && !(PROJECT_STAGES as readonly string[]).includes(stage)) return { ok: false, error: "Unknown stage." };
-    await prisma.project.update({ where: { id: projectId }, data: { stage: stage || null } });
+    await recorded(async (tx) => {
+      const before = await tx.project.findUniqueOrThrow({ where: { id: projectId }, select: { stage: true } });
+      await tx.project.update({ where: { id: projectId }, data: { stage: stage || null } });
+      if ((before.stage ?? "") !== stage) {
+        await appendEvent(tx, {
+          projectId,
+          type: "STAGE_CHANGED",
+          actor: actorFromSession(session),
+          title: stage ? `Stage: ${stage}` : "Stage cleared",
+          metadata: { action: "stage", from: before.stage, to: stage || null },
+        });
+      }
+    });
     revalidateAll();
     return { ok: true };
   } catch (error) {
@@ -1055,7 +1325,7 @@ export async function setProjectStage(projectId: string, stage: string): Promise
 export async function createSelection(projectId: string, input: unknown, requestId?: string, photoId?: string): Promise<ActionResult> {
   const rid = requestIdOf(requestId);
   try {
-    await requireSession();
+    const session = await requireSession();
     const parsed = selectionSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
     const v = parsed.data;
@@ -1063,8 +1333,18 @@ export async function createSelection(projectId: string, input: unknown, request
       const photo = await prisma.photo.findUnique({ where: { id: photoId }, include: { selection: true } });
       if (!photo || photo.kind !== "SELECTION" || photo.projectId !== projectId || photo.selection) return { ok: false, error: "That photo cannot be attached." };
     }
-    await prisma.selection.create({
-      data: { projectId, category: v.category, name: v.name, details: orNull(v.details), photoId: photoId || null, clientRequestId: rid },
+    await recorded(async (tx) => {
+      const sel = await tx.selection.create({
+        data: { projectId, category: v.category, name: v.name, details: orNull(v.details), photoId: photoId || null, clientRequestId: rid },
+      });
+      await appendEvent(tx, {
+        projectId,
+        type: "NOTE",
+        actor: actorFromSession(session),
+        title: "Product selection put to client",
+        description: v.name,
+        metadata: { action: "selection-added", selectionId: sel.id, photoId: photoId || null },
+      });
     });
     revalidateAll();
     return { ok: true };
@@ -1076,9 +1356,21 @@ export async function createSelection(projectId: string, input: unknown, request
 
 export async function deleteSelection(id: string): Promise<ActionResult> {
   try {
-    await requireSession();
+    const session = await requireSession();
     const item = await prisma.selection.findUnique({ where: { id } });
-    await prisma.selection.delete({ where: { id } });
+    await recorded(async (tx) => {
+      await tx.selection.delete({ where: { id } });
+      if (item) {
+        await appendEvent(tx, {
+          projectId: item.projectId,
+          type: "NOTE",
+          actor: actorFromSession(session),
+          title: "Product selection withdrawn",
+          description: item.name,
+          metadata: { action: "selection-deleted", selectionId: id },
+        });
+      }
+    });
     if (item?.photoId) {
       const photo = await prisma.photo.findUnique({ where: { id: item.photoId } });
       if (photo) {
@@ -1096,10 +1388,20 @@ export async function deleteSelection(id: string): Promise<ActionResult> {
 export async function createDailyLog(projectId: string, input: unknown, requestId?: string): Promise<ActionResult> {
   const rid = requestIdOf(requestId);
   try {
-    await requireSession();
+    const session = await requireSession();
     const parsed = dailyLogSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
-    await prisma.dailyLog.create({ data: { projectId, date: toDate(parsed.data.date), note: parsed.data.note, clientRequestId: rid } });
+    await recorded(async (tx) => {
+      const log = await tx.dailyLog.create({ data: { projectId, date: toDate(parsed.data.date), note: parsed.data.note, clientRequestId: rid } });
+      await appendEvent(tx, {
+        projectId,
+        type: "NOTE",
+        actor: actorFromSession(session),
+        title: "Progress note for the client",
+        description: parsed.data.note,
+        metadata: { action: "daily-log", logId: log.id, day: parsed.data.date },
+      });
+    });
     revalidateAll();
     return { ok: true };
   } catch (error) {
@@ -1110,8 +1412,18 @@ export async function createDailyLog(projectId: string, input: unknown, requestI
 
 export async function deleteDailyLog(id: string): Promise<ActionResult> {
   try {
-    await requireSession();
-    await prisma.dailyLog.delete({ where: { id } });
+    const session = await requireSession();
+    await recorded(async (tx) => {
+      const log = await tx.dailyLog.delete({ where: { id } });
+      await appendEvent(tx, {
+        projectId: log.projectId,
+        type: "NOTE",
+        actor: actorFromSession(session),
+        title: "Progress note withdrawn",
+        description: log.note,
+        metadata: { action: "daily-log-deleted", logId: id },
+      });
+    });
     revalidateAll();
     return { ok: true };
   } catch (error) {
@@ -1158,7 +1470,7 @@ export async function deletePaymentMilestone(id: string): Promise<ActionResult> 
  */
 export async function decideChangeOrder(id: string, decision: unknown): Promise<ActionResult> {
   try {
-    const { clientUser, clientId } = await requireClient();
+    const { session, clientUser, clientId } = await requireClient();
     if (decision !== "APPROVED" && decision !== "REJECTED") return { ok: false, error: "Unknown decision." };
     const order = await prisma.changeOrder.findUnique({ where: { id }, include: { project: true } });
     // Another client's change order (or one that was never sent) is simply not found.
@@ -1166,15 +1478,25 @@ export async function decideChangeOrder(id: string, decision: unknown): Promise<
     if (order.clientDecision) return order.clientDecision === decision ? { ok: true } : { ok: false, error: "This change order has already been decided." };
     if (order.status !== "PENDING") return { ok: false, error: "This change order has already been decided by the contractor." };
     const now = new Date();
-    await prisma.changeOrder.update({
-      where: { id },
-      data: {
-        clientDecision: decision,
-        clientDecidedAt: now,
-        clientDecidedById: clientUser.id,
-        status: decision,
-        approvedAt: decision === "APPROVED" ? now : null,
-      },
+    await recorded(async (tx) => {
+      await tx.changeOrder.update({
+        where: { id },
+        data: {
+          clientDecision: decision,
+          clientDecidedAt: now,
+          clientDecidedById: clientUser.id,
+          status: decision,
+          approvedAt: decision === "APPROVED" ? now : null,
+        },
+      });
+      await appendEvent(tx, {
+        projectId: order.projectId,
+        type: "APPROVAL",
+        actor: { ...actorFromSession(session), name: clientUser.name ?? clientUser.email },
+        title: `Client ${decision === "APPROVED" ? "approved" : "rejected"} a change order: ${rm(order.amount)}`,
+        description: order.description,
+        metadata: { action: decision.toLowerCase(), changeOrderId: id, clientUserId: clientUser.id },
+      });
     });
     revalidateAll();
     return { ok: true };
@@ -1185,11 +1507,21 @@ export async function decideChangeOrder(id: string, decision: unknown): Promise<
 
 export async function approveSelection(id: string): Promise<ActionResult> {
   try {
-    const { clientUser, clientId } = await requireClient();
+    const { session, clientUser, clientId } = await requireClient();
     const item = await prisma.selection.findUnique({ where: { id }, include: { project: true } });
     if (!item || item.project.clientId !== clientId) return { ok: false, error: "Selection not found." };
     if (item.status === "APPROVED") return { ok: true };
-    await prisma.selection.update({ where: { id }, data: { status: "APPROVED", approvedAt: new Date(), approvedById: clientUser.id } });
+    await recorded(async (tx) => {
+      await tx.selection.update({ where: { id }, data: { status: "APPROVED", approvedAt: new Date(), approvedById: clientUser.id } });
+      await appendEvent(tx, {
+        projectId: item.projectId,
+        type: "APPROVAL",
+        actor: { ...actorFromSession(session), name: clientUser.name ?? clientUser.email },
+        title: "Client approved a product selection",
+        description: item.name,
+        metadata: { action: "approved", selectionId: id, clientUserId: clientUser.id },
+      });
+    });
     revalidateAll();
     return { ok: true };
   } catch (error) {

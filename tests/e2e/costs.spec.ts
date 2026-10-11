@@ -10,6 +10,7 @@ test("cost, payment and change order flow updates totals", async ({ page }) => {
   await card.click();
   await expect(page.getByRole("heading", { name })).toBeVisible();
 
+  await page.getByRole("tab", { name: "Costs" }).click();
   await page.getByRole("button", { name: "+ Add Cost" }).first().click();
   let dialog = page.getByRole("dialog");
   await dialog.getByLabel("Category").selectOption("MATERIAL");
@@ -55,6 +56,7 @@ test("cost, payment and change order flow updates totals", async ({ page }) => {
 test("form validation blocks bad amounts", async ({ page }) => {
   await login(page);
   await page.getByRole("link").filter({ hasText: "Bangsar Shop Lot Fit-Out" }).click();
+  await page.getByRole("tab", { name: "Costs" }).click();
   await page.getByRole("button", { name: "+ Add Cost" }).first().click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Description").fill("Bad");

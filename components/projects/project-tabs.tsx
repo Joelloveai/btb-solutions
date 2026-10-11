@@ -35,6 +35,8 @@ import { AddChangeOrderForm } from "@/components/forms/add-change-order-form";
 import { AddCostForm } from "@/components/forms/add-cost-form";
 import { AddPaymentForm } from "@/components/forms/add-payment-form";
 import { Badge } from "@/components/ui/badge";
+import { AddToTimeline } from "@/components/timeline/capture-sheet";
+import { TimelinePanel } from "@/components/timeline/timeline-panel";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -97,6 +99,7 @@ export type BoqRow = {
 };
 
 const TABS = [
+  { id: "timeline", label: "Timeline" },
   { id: "costs", label: "costs" },
   { id: "payments", label: "payments" },
   { id: "changes", label: "changeOrders" },
@@ -125,6 +128,7 @@ export function ProjectTabs({
   punch,
   documents,
   clientView,
+  timeline,
 }: {
   projectId: string;
   costs: CostRow[];
@@ -142,13 +146,14 @@ export function ProjectTabs({
   punch: PunchRow[];
   documents: DocRow[];
   clientView: ComponentProps<typeof ClientViewPanel>;
+  timeline: ComponentProps<typeof TimelinePanel>["initial"];
 }) {
   const t = useT();
   const openPunch = punch.filter((p) => p.status !== "CLOSED").length;
   const beforeCoverMissing = BEFORE_COVER_ITEMS.filter((item) => !checklistCounts[item.key]).length;
 
   return (
-    <Tabs defaultValue="costs" className="w-full">
+    <Tabs defaultValue="timeline" className="w-full">
       <TabsList className="flex overflow-x-auto">
         {TABS.map((item) => (
           <TabsTrigger key={item.id} value={item.id} className="shrink-0 flex-1 px-3">
@@ -166,6 +171,9 @@ export function ProjectTabs({
           </TabsTrigger>
         ))}
       </TabsList>
+      <TabsContent value="timeline">
+        <TimelinePanel projectId={projectId} initial={timeline} />
+      </TabsContent>
       <TabsContent value="costs">
         <PendingOps projectId={projectId} types={["addCost"]} />
         <CostsPanel projectId={projectId} rows={costs} lookups={lookups} />
@@ -217,6 +225,7 @@ export function ProjectTabs({
         <PendingOps projectId={projectId} types={["createTask", "completeTask"]} />
         <TasksPanel projectId={projectId} rows={tasks} lookups={lookups} />
       </TabsContent>
+      <AddToTimeline projectId={projectId} lookups={lookups} />
     </Tabs>
   );
 }

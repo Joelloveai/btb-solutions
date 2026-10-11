@@ -91,3 +91,33 @@ export const PROJECT_STAGES = ["Demo", "Framing", "Rough-in", "Finishing", "Comp
 export type ProjectStage = (typeof PROJECT_STAGES)[number];
 
 export const SELECTION_CATEGORIES = ["Tiles", "Paint", "Fixtures", "Appliances", "Flooring", "Other"] as const;
+
+/** What a TimelineEvent records. Events are never edited or removed; a change appends a new event. */
+export const TIMELINE_EVENT_TYPES = [
+  "PHOTO",
+  "COST",
+  "PAYMENT",
+  "CLAIM",
+  "CHANGE_ORDER",
+  "TASK_CREATED",
+  "TASK_COMPLETED",
+  "PUNCH_CREATED",
+  "PUNCH_RESOLVED",
+  "DOCUMENT_UPLOADED",
+  "SITE_DIARY",
+  "MESSAGE",
+  "APPROVAL",
+  "STAGE_CHANGED",
+  "NOTE",
+] as const;
+export type TimelineEventType = (typeof TIMELINE_EVENT_TYPES)[number];
+
+/** The filter chips on the Timeline tab. */
+export const TIMELINE_FILTERS = [
+  { id: "all", label: "All", types: null },
+  { id: "photos", label: "Photos", types: ["PHOTO"] },
+  { id: "money", label: "Money", types: ["COST", "PAYMENT", "CLAIM", "CHANGE_ORDER"] },
+  { id: "tasks", label: "Tasks", types: ["TASK_CREATED", "TASK_COMPLETED", "PUNCH_CREATED", "PUNCH_RESOLVED"] },
+  { id: "documents", label: "Documents", types: ["DOCUMENT_UPLOADED"] },
+  { id: "diary", label: "Diary", types: ["SITE_DIARY", "NOTE"] },
+] as const;

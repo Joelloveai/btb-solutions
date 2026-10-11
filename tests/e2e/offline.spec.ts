@@ -20,6 +20,7 @@ async function openProject(page: Page, name: string) {
 }
 
 async function addCostThroughDialog(page: Page, description: string, amount: string) {
+  await page.getByRole("tab", { name: "Costs" }).click();
   await page.getByRole("button", { name: "+ Add Cost" }).first().click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Description").fill(description);

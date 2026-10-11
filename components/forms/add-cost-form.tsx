@@ -16,7 +16,7 @@ import { costSchema, type CostInput } from "@/lib/validators";
 import { useOfflineSubmit } from "@/components/offline/use-offline-submit";
 import { useSubmit } from "./use-submit";
 
-function Form({
+export function CostFormBody({
   projectId,
   lookups,
   close,
@@ -122,7 +122,7 @@ function Form({
 export function AddCostForm({ projectId, lookups }: { projectId: string; lookups: Lookups }) {
   return (
     <ModalButton label="+ Add Cost" title="Add cost">
-      {(close) => <Form projectId={projectId} lookups={lookups} close={close} />}
+      {(close) => <CostFormBody projectId={projectId} lookups={lookups} close={close} />}
     </ModalButton>
   );
 }
@@ -144,7 +144,7 @@ export function EditCostButton({
     <>
       <EditIconButton label="Edit cost" onClick={() => setOpen(true)} />
       <Modal open={open} onClose={close} title="Edit cost">
-        <Form projectId={projectId} lookups={lookups} close={close} editing={{ id, values }} />
+        <CostFormBody projectId={projectId} lookups={lookups} close={close} editing={{ id, values }} />
       </Modal>
     </>
   );

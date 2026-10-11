@@ -61,6 +61,7 @@ test("a quote runs the whole money loop with no manual step in between", async (
   // subcon cost of 30,000 against the BOQ line, then pay the subcon
   await page.goto("/projects");
   await page.getByRole("link").filter({ hasText: title }).click();
+  await page.getByRole("tab", { name: "Costs" }).click();
   await page.getByRole("button", { name: "+ Add Cost" }).first().click();
   dialog = page.getByRole("dialog");
   await dialog.getByLabel("Category").selectOption("SUBCON");

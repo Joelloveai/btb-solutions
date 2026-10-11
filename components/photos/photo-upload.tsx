@@ -45,6 +45,7 @@ export function PhotoUpload({
   withCaption = true,
   defaults,
   onDone,
+  autoOpen = false,
 }: {
   kind: "PROGRESS" | "FLOORPLAN" | "TASK";
   projectId?: string;
@@ -54,6 +55,8 @@ export function PhotoUpload({
   /** Pre-filled tags, e.g. from a "before cover" checklist item. */
   defaults?: PhotoDefaults;
   onDone?: () => void;
+  /** Open the camera as soon as this appears (it was reached by tapping a capture button). */
+  autoOpen?: boolean;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const geoRequest = useRef<Promise<Geo | null> | null>(null);
@@ -72,6 +75,15 @@ export function PhotoUpload({
     if (!defaults?.trade) setTrade(remembered("btb-photo-trade"));
     if (!defaults?.phase) setPhase(remembered("btb-photo-phase"));
   }, [tagged, defaults?.trade, defaults?.phase]);
+
+  useEffect(() => {
+    if (autoOpen) {
+      geoRequest.current = captureLocation().then((g) => (setGeo(g), g));
+      input.current?.click();
+    }
+    // Only once, when the sheet opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const reset = () => {
     setFile(null);

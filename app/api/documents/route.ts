@@ -6,6 +6,8 @@ import { DOCUMENT_TYPES, PHOTO_TRADES } from "@/lib/constants";
 import { MAX_DOCUMENT_BYTES, detectDocumentType, documentNameKey } from "@/lib/document-files";
 import { deleteDocumentFile, documentFileKey, saveDocumentFile } from "@/lib/document-storage";
 import { prisma } from "@/lib/prisma";
+import { appendEvent, recorded } from "@/lib/timeline";
+import { actorFromSession } from "@/lib/timeline-actor";
 
 export const dynamic = "force-dynamic";
 
@@ -68,11 +70,11 @@ export async function POST(request: Request) {
   // refuses the second, which simply asks again and gets the next number.
   for (let attempt = 0; attempt < 4; attempt += 1) {
     try {
-      const created = await prisma.$transaction(async (tx) => {
+      const created = await recorded(async (tx) => {
         const latest = await tx.document.aggregate({ where: { projectId: project.id, nameKey }, _max: { version: true } });
         const version = (latest._max.version ?? 0) + 1;
         await tx.document.updateMany({ where: { projectId: project.id, nameKey }, data: { isCurrent: false } });
-        return tx.document.create({
+        const doc = await tx.document.create({
           data: {
             id,
             projectId: project.id,
@@ -92,6 +94,15 @@ export async function POST(request: Request) {
             clientRequestId: requestId,
           },
         });
+        await appendEvent(tx, {
+          projectId: project.id,
+          type: "DOCUMENT_UPLOADED",
+          actor: actorFromSession(session),
+          title: `${type === "Drawing" ? "Drawing" : "Document"} uploaded: ${name} (version ${version})`,
+          description: note,
+          metadata: { action: "added", documentId: id, version, type, trade: trade || null, sha256 },
+        });
+        return doc;
       });
       return json({ id: created.id, version: created.version }, 201);
     } catch (error) {

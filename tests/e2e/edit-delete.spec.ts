@@ -13,6 +13,7 @@ async function openNewProject(page: Page, prefix: string) {
 test("edit a cost entry and the dashboard total changes", async ({ page }) => {
   const name = await openNewProject(page, "Edit cost");
 
+  await page.getByRole("tab", { name: "Costs" }).click();
   await page.getByRole("button", { name: "+ Add Cost" }).first().click();
   let dialog = page.getByRole("dialog");
   await dialog.getByLabel("Description").fill("Cement");

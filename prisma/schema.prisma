@@ -50,6 +50,7 @@ model Project {
   selections        Selection[]
   dailyLogs         DailyLog[]
   paymentMilestones PaymentMilestone[]
+  timelineEvents    TimelineEvent[]
 }
 
 model CostEntry {
@@ -372,4 +373,31 @@ model PaymentMilestone {
   percent   Decimal
   dueDate   DateTime?
   createdAt DateTime  @default(now())
+}
+
+/// Append-only record of what happened on a project. Each row's hash covers its content and the previous
+/// row's hash, so altering or removing any past row breaks the chain from that point on.
+model TimelineEvent {
+  id           String   @id @default(cuid())
+  projectId    String
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  seq          Int
+  eventType    String
+  actorId      String?
+  actorRole    String
+  actorName    String?
+  title        String
+  description  String?
+  metadata     String   @default("{}")
+  latitude     Float?
+  longitude    Float?
+  capturedAt   DateTime
+  createdAt    DateTime @default(now())
+  hash         String
+  previousHash String?
+  /// Lets a retried note from a phone with bad signal be recognised. Not part of the hash.
+  clientRequestId String? @unique
+
+  @@unique([projectId, seq])
+  @@index([projectId, capturedAt])
 }

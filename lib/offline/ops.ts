@@ -1,4 +1,4 @@
-import { addCost, addPayment, completeTask, createDailyLog, createPunchItem, createSelection, createTask, resolvePunchItem, type ActionResult } from "@/app/actions";
+import { addCost, addNote, addPayment, completeTask, createDailyLog, createPunchItem, createSelection, createTask, resolvePunchItem, type ActionResult } from "@/app/actions";
 import { updateOp } from "./outbox";
 import type { OutboxOp } from "./db";
 
@@ -64,6 +64,8 @@ export async function executeOp(op: OutboxOp): Promise<ExecResult> {
         return fromAction(await withTimeout(addCost(op.projectId as string, op.payload.input, op.id)));
       case "addPayment":
         return fromAction(await withTimeout(addPayment(op.projectId as string, op.payload.input, op.id)));
+      case "addNote":
+        return fromAction(await withTimeout(addNote(op.projectId as string, op.payload.text, op.id, new Date(op.createdAt).toISOString())));
       case "createTask":
         return fromAction(await withTimeout(createTask(op.projectId as string, op.payload.input, op.id)));
       case "uploadPhoto": {

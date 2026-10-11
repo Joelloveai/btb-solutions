@@ -29,11 +29,13 @@ test("one-thumb cost entry: three fields, today's date, the rest tucked under Mo
 
   // The dev server compiles the form on first use; time the open once it is warm (production has no such step).
   const dialog = page.getByRole("dialog");
+  await page.getByRole("tab", { name: "Costs" }).click();
   await page.getByRole("button", { name: "+ Add Cost" }).first().click();
   await expect(dialog.getByLabel("Amount (RM)")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
   const opened = Date.now();
+  await page.getByRole("tab", { name: "Costs" }).click();
   await page.getByRole("button", { name: "+ Add Cost" }).first().click();
   await expect(dialog.getByLabel("Amount (RM)")).toBeVisible();
   expect(Date.now() - opened).toBeLessThan(1000);

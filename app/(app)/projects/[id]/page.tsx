@@ -18,6 +18,7 @@ import { LoginAccess } from "@/components/portal/login-access";
 import { OfflineSnapshot } from "@/components/offline/offline-snapshot";
 import { getT } from "@/lib/locale";
 import { prisma } from "@/lib/prisma";
+import { fetchTimelinePage } from "@/lib/timeline-query";
 import { Prisma } from "@prisma/client";
 import { LinkClientButton } from "@/components/clients/link-client-button";
 import { EditProjectButton } from "@/components/forms/edit-project-form";
@@ -45,6 +46,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
     },
   });
   if (!project) notFound();
+  const timeline = await fetchTimelinePage(project.id, "all");
   const uploaderEmails = new Map(
     (await prisma.user.findMany({ where: { id: { in: project.documents.map((d) => d.uploadedById).filter((id): id is string => !!id) } }, select: { id: true, email: true } })).map((u) => [u.id, u.email]),
   );
@@ -230,6 +232,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
 
       <ProjectTabs
         projectId={project.id}
+        timeline={timeline}
         photos={progressPhotos.map(toPhotoItem)}
         checklistCounts={checklistCounts}
         floorPlans={project.photos.filter((p) => p.kind === "FLOORPLAN").map(toPhotoItem)}
