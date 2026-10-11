@@ -10,7 +10,7 @@ export function PortalHeader({ title, home, signOutTo }: { title: string; home: 
   const safeSignOut = useSafeSignOut();
   return (
     <div className="mb-5 flex items-center justify-between gap-3 print:hidden">
-      <Link href={home} className="flex items-center gap-2">
+      <Link href={home} className="flex min-h-12 items-center gap-2">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/logo.svg" alt="" className="h-8 w-8" />
         <span className="font-semibold tracking-tight">{title}</span>

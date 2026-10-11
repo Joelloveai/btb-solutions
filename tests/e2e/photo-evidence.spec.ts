@@ -19,7 +19,7 @@ async function uploadTagged(region: ReturnType<Page["getByRole"]>, page: Page, o
   await region.getByLabel("Location (optional)").fill(opts.location);
   await region.getByLabel("Caption (optional)").fill(opts.caption);
   await expect(region.getByTestId("geo-status")).toContainText("Location captured (±15 m)");
-  await region.getByRole("button", { name: "Upload photo" }).click();
+  await region.getByRole("button", { name: "Save photo" }).click();
   await expect(region.getByText(opts.caption)).toBeVisible();
 }
 
@@ -85,7 +85,7 @@ test.describe("photo evidence", () => {
     // Filed as Pre-cover under the right trade without anyone choosing it.
     await expect(dialog.getByLabel("Phase")).toHaveValue("Pre-cover");
     await expect(dialog.getByLabel("Trade")).toHaveValue("Structural");
-    await dialog.getByRole("button", { name: "Upload photo" }).click();
+    await dialog.getByRole("button", { name: "Save photo" }).click();
     await expect(dialog).toBeHidden();
 
     await expect(checklist.getByTestId("before-cover-status")).toHaveText("1 of 4 photographed");

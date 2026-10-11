@@ -90,13 +90,13 @@ function Form({ projectId, defaults, existing, close }: { projectId: string; def
       </Field>
       {problem ? <p className="text-sm font-medium text-destructive">{problem}</p> : null}
       <Button type="button" className="w-full" onClick={upload} disabled={pending || preparing}>
-        {pending || preparing ? "Uploading…" : match ? `Upload as version ${match.version + 1}` : "Upload document"}
+        {pending || preparing ? "Saving…" : match ? `Save as version ${match.version + 1}` : "Save document"}
       </Button>
     </div>
   );
 }
 
-export function UploadDocumentForm({ projectId, existing, defaults, label = "+ Upload Document", title = "Upload document", variant = "primary" }: { projectId: string; existing: Existing[]; defaults?: DocumentDefaults; label?: string; title?: string; variant?: "primary" | "secondary" }) {
+export function UploadDocumentForm({ projectId, existing, defaults, label = "+ Add Document", title = "Add document", variant = "primary" }: { projectId: string; existing: Existing[]; defaults?: DocumentDefaults; label?: string; title?: string; variant?: "primary" | "secondary" }) {
   return (
     <ModalButton label={label} title={title} variant={variant}>
       {(close) => <Form projectId={projectId} existing={existing} defaults={defaults} close={close} />}

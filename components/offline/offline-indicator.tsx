@@ -48,7 +48,7 @@ export function OfflineIndicator() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent aria-describedby={undefined}>
           <DialogHeader>
-            <DialogTitle>Waiting to sync</DialogTitle>
+            <DialogTitle>Saved, waiting for signal</DialogTitle>
             <DialogDescription>Saved on this phone. They are sent automatically when you have signal.</DialogDescription>
           </DialogHeader>
           <ul className="space-y-2">

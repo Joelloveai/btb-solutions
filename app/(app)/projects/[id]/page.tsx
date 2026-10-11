@@ -138,7 +138,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
 
   return (
     <>
-      <Link href="/dashboard" className="mb-2 inline-flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground">
+      <Link href="/dashboard" className="min-h-12 mb-2 inline-flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground">
         <ChevronLeft className="h-4 w-4" aria-hidden="true" />
         {t.dashboard}
       </Link>

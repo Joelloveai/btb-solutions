@@ -61,7 +61,7 @@ export function PendingOps({ projectId, types }: { projectId?: string; types?: O
   const ops = useOutbox().filter((op) => (!projectId || op.projectId === projectId) && (!types || types.includes(op.type)));
   if (ops.length === 0) return null;
   return (
-    <ul className="mb-3 space-y-2" aria-label="Waiting to sync">
+    <ul className="mb-3 space-y-2" aria-label="Saved, waiting for signal">
       {ops.map((op) => (
         <PendingOpRow key={op.id} op={op} />
       ))}

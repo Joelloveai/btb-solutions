@@ -18,7 +18,7 @@ test("contractor uploads a progress photo with a caption, sees date and time, an
   const progress = page.getByRole("region", { name: "Progress photos" });
   await progress.locator("input[type=file]").setInputFiles(png("kitchen.png"));
   await progress.getByLabel("Caption (optional)").fill("Kitchen tiling done");
-  await progress.getByRole("button", { name: "Upload photo" }).click();
+  await progress.getByRole("button", { name: "Save photo" }).click();
   await expect(page.getByText(/Added to timeline\. \d+ photos? today\./)).toBeVisible();
 
   await expect(progress.getByText("Kitchen tiling done")).toBeVisible();
@@ -27,7 +27,7 @@ test("contractor uploads a progress photo with a caption, sees date and time, an
 
   // Only real images are accepted, whatever the file is called.
   await progress.locator("input[type=file]").setInputFiles({ name: "evil.png", mimeType: "image/png", buffer: Buffer.from("<script>alert(1)</script>") });
-  await progress.getByRole("button", { name: "Upload photo" }).click();
+  await progress.getByRole("button", { name: "Save photo" }).click();
   await expect(page.getByText("Only JPEG, PNG or WebP photos are accepted.")).toBeVisible();
 
   await page.getByRole("button", { name: "Delete photo" }).click();

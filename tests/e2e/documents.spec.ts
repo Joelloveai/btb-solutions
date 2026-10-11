@@ -29,8 +29,8 @@ test("uploading the same document name again makes version 2, keeps version 1, a
   await createProject(page, project, "90000");
   await openDocuments(page, project);
 
-  let dialog = await upload(page, { button: "+ Upload Document", label: "ground-v1", name: "Ground floor plan", trade: "Plumbing" });
-  await dialog.getByRole("button", { name: "Upload document" }).click();
+  let dialog = await upload(page, { button: "+ Add Document", label: "ground-v1", name: "Ground floor plan", trade: "Plumbing" });
+  await dialog.getByRole("button", { name: "Save document" }).click();
   await expect(dialog).toBeHidden();
   const row = page.getByTestId("document-row").filter({ hasText: "Ground floor plan" });
   await expect(row).toContainText("v1");
@@ -38,9 +38,9 @@ test("uploading the same document name again makes version 2, keeps version 1, a
   await expect(page.getByText("Latest Drawings", { exact: true })).toBeVisible(); // a fresh drawing is flagged on the project
 
   // Same name again (any capitals, stray spaces): it is version 2, and says so before uploading.
-  dialog = await upload(page, { button: "+ Upload Document", label: "ground-v2", name: "  ground FLOOR plan ", trade: "Plumbing", note: "Rev B: kitchen wall moved 300 mm" });
+  dialog = await upload(page, { button: "+ Add Document", label: "ground-v2", name: "  ground FLOOR plan ", trade: "Plumbing", note: "Rev B: kitchen wall moved 300 mm" });
   await expect(dialog.getByTestId("version-hint")).toContainText("version 2");
-  await dialog.getByRole("button", { name: "Upload as version 2" }).click();
+  await dialog.getByRole("button", { name: "Save as version 2" }).click();
   await expect(dialog).toBeHidden();
 
   // One row, now version 2, with the note. No second row for version 1.
@@ -85,8 +85,8 @@ test("a subcontractor sees only current drawings for their trade on projects the
 
   // The unrelated project has a drawing, but the plumber has no work there.
   await openDocuments(page, other);
-  let dialog = await upload(page, { button: "+ Upload Document", label: "secret", name: "Unrelated plan", trade: "Plumbing" });
-  await dialog.getByRole("button", { name: "Upload document" }).click();
+  let dialog = await upload(page, { button: "+ Add Document", label: "secret", name: "Unrelated plan", trade: "Plumbing" });
+  await dialog.getByRole("button", { name: "Save document" }).click();
   await expect(dialog).toBeHidden();
 
   // The plumber's project: a plumbing drawing (two versions), an electrical drawing, a general drawing, a contract.
@@ -99,8 +99,8 @@ test("a subcontractor sees only current drawings for their trade on projects the
     { label: "gen", name: "General arrangement" },
     { label: "con", name: "Main contract", type: "Contract" },
   ]) {
-    dialog = await upload(page, { button: "+ Upload Document", label: d.label, name: d.name, trade: d.trade, type: d.type, note: d.note });
-    await dialog.getByRole("button", { name: /^Upload/ }).click();
+    dialog = await upload(page, { button: "+ Add Document", label: d.label, name: d.name, trade: d.trade, type: d.type, note: d.note });
+    await dialog.getByRole("button", { name: /^Save (document|as version)/ }).click();
     await expect(dialog).toBeHidden();
   }
   const versions = await (async () => {

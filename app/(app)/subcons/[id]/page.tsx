@@ -32,7 +32,7 @@ export default async function SubconPage({ params }: { params: { id: string } })
 
   return (
     <>
-      <Link href="/subcons" className="mb-2 inline-flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground">
+      <Link href="/subcons" className="min-h-12 mb-2 inline-flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground">
         <ChevronLeft className="h-4 w-4" aria-hidden="true" />
         Subcons
       </Link>

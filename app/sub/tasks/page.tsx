@@ -113,7 +113,7 @@ export default async function SubTasksPage() {
         <section aria-label="Punch items due" className="mt-8 space-y-2">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-muted-foreground">Punch items to fix ({punch.length})</h2>
-            <Link href="/sub/punch" className="text-sm font-medium underline underline-offset-2">
+            <Link href="/sub/punch" className="inline-flex min-h-12 items-center text-sm font-medium underline underline-offset-2">
               See all punch items
             </Link>
           </div>

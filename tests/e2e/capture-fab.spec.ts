@@ -67,13 +67,13 @@ test.describe("one-tap capture", () => {
     sheet = page.getByRole("dialog");
     await sheet.getByRole("button", { name: "Photo", exact: true }).click();
     await sheet.getByLabel("Take photo").setInputFiles(png("one.png"));
-    await sheet.getByRole("button", { name: "Upload photo" }).click();
+    await sheet.getByRole("button", { name: "Save photo" }).click();
     await expect(page.getByText("Added to timeline. 1 photo today.")).toBeVisible();
     await expect(sheet).toBeHidden();
     await fab(page).click();
     await page.getByRole("dialog").getByRole("button", { name: "Photo", exact: true }).click();
     await page.getByRole("dialog").getByLabel("Take photo").setInputFiles(png("two.png"));
-    await page.getByRole("dialog").getByRole("button", { name: "Upload photo" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Save photo" }).click();
     await expect(page.getByText("Added to timeline. 2 photos today.")).toBeVisible();
 
     // Note: the microphone starts by itself.
@@ -129,7 +129,7 @@ test.describe("one-tap capture", () => {
     await sheet.getByRole("button", { name: "Photo", exact: true }).click();
     await sheet.getByRole("button", { name: /Paint the hall/ }).click();
     await sheet.getByLabel("Take photo").setInputFiles(png("wall.png"));
-    await sheet.getByRole("button", { name: "Upload photo" }).click();
+    await sheet.getByRole("button", { name: "Save photo" }).click();
     await expect(sub.page.getByText(/Added to timeline\. 1 photo today\./)).toBeVisible();
 
     await fab(sub.page).click();

@@ -57,11 +57,11 @@ test("every action leaves an event on the project timeline, in an unbroken hash 
   // A task, a note, a photo and a document, each in the field-friendly way.
   await addTask(page, { description: "Set out the kitchen", due: "2026-12-01" });
   await page.getByRole("tab", { name: "Documents" }).click();
-  await page.getByRole("button", { name: "+ Upload Document" }).first().click();
+  await page.getByRole("button", { name: "+ Add Document" }).first().click();
   dialog = page.getByRole("dialog");
   await dialog.getByLabel("Document file").setInputFiles(pdf("plan"));
   await dialog.getByLabel("Document name").fill("Ground plan");
-  await dialog.getByRole("button", { name: "Upload document" }).click();
+  await dialog.getByRole("button", { name: "Save document" }).click();
   await expect(dialog).toBeHidden();
 
   await page.getByRole("tab", { name: "Timeline" }).click();
@@ -76,7 +76,7 @@ test("every action leaves an event on the project timeline, in an unbroken hash 
   dialog = page.getByRole("dialog");
   await dialog.getByRole("button", { name: "Photo" }).click();
   await dialog.getByLabel("Take photo").setInputFiles(png("slab.png"));
-  await dialog.getByRole("button", { name: "Upload photo" }).click();
+  await dialog.getByRole("button", { name: "Save photo" }).click();
   await expect(dialog).toBeHidden();
 
   await page.reload();

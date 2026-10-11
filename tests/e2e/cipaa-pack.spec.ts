@@ -34,7 +34,7 @@ test("CIPAA pack: one PDF with claim, photos, VOs and a verified chain; evidence
   await page.getByRole("tab", { name: "Progress Photos" }).click();
   const photos = page.getByRole("region", { name: "Progress photos" });
   await photos.locator("input[type=file]").setInputFiles(png("slab.png"));
-  await photos.getByRole("button", { name: "Upload photo" }).click();
+  await photos.getByRole("button", { name: "Save photo" }).click();
   await expect(page.getByText("Add location to strengthen this as evidence.")).toBeVisible();
   await expect(page.getByText(/Added to timeline\. \d+ photos? today\./)).toBeVisible();
 

@@ -204,7 +204,7 @@ export function PhotoUpload({
             </Field>
           ) : null}
           <Button type="button" onClick={upload} disabled={busy} className="w-full">
-            {busy ? "Uploading…" : "Upload photo"}
+            {busy ? "Saving…" : "Save photo"}
           </Button>
         </>
       ) : null}

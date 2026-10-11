@@ -17,7 +17,7 @@ export function MobileNav() {
   return (
     <nav
       aria-label="Mobile"
-      className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t bg-card pb-[env(safe-area-inset-bottom)] md:hidden print:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 gap-2 border-t bg-card px-2 pb-[env(safe-area-inset-bottom)] md:hidden print:hidden"
     >
       {items.map((item) => {
         const active = isActive(pathname, item.href);
@@ -28,7 +28,7 @@ export function MobileNav() {
             href={item.href}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "flex h-16 flex-col items-center justify-center gap-1 border-t-2 text-[11px] font-medium",
+              "flex h-16 flex-col items-center justify-center gap-1 rounded-md border-t-2 text-[11px] font-medium",
               active ? "border-accent text-foreground" : "border-transparent text-muted-foreground",
             )}
           >

@@ -27,7 +27,7 @@ export default async function QuotePage({ params }: { params: { id: string } }) 
 
   return (
     <div className="mx-auto max-w-3xl">
-      <Link href="/quotes" className="mb-2 inline-flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground">
+      <Link href="/quotes" className="min-h-12 mb-2 inline-flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground">
         <ChevronLeft className="h-4 w-4" aria-hidden="true" />
         Quotes
       </Link>

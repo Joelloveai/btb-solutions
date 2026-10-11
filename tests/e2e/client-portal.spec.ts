@@ -51,11 +51,11 @@ test.describe("client portal", () => {
     await staff.page.getByRole("tab", { name: "Progress Photos" }).click();
     await staff.page.getByRole("region", { name: "Progress photos" }).locator("input[type=file]").setInputFiles(png("slab.png"));
     await staff.page.getByRole("region", { name: "Progress photos" }).getByLabel("Caption (optional)").fill("Slab poured");
-    await staff.page.getByRole("region", { name: "Progress photos" }).getByRole("button", { name: "Upload photo" }).click();
+    await staff.page.getByRole("region", { name: "Progress photos" }).getByRole("button", { name: "Save photo" }).click();
     await expect(staff.page.getByText("Slab poured")).toBeVisible();
     await staff.page.getByRole("region", { name: "Floor plans" }).locator("input[type=file]").setInputFiles(png("plan.png"));
     await staff.page.getByRole("region", { name: "Floor plans" }).getByLabel("Caption (optional)").fill("Ground floor");
-    await staff.page.getByRole("region", { name: "Floor plans" }).getByRole("button", { name: "Upload photo" }).click();
+    await staff.page.getByRole("region", { name: "Floor plans" }).getByRole("button", { name: "Save photo" }).click();
     await expect(staff.page.getByText("Ground floor")).toBeVisible();
 
     await addTask(staff.page, { description: "Pour slab", start: "2026-10-01", due: "2026-10-05" });

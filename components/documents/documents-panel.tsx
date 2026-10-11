@@ -75,7 +75,7 @@ export function DocumentsPanel({ projectId, docs }: { projectId: string; docs: D
         <UploadDocumentForm projectId={projectId} existing={existing} />
       </div>
       {current.length === 0 ? (
-        <EmptyState title="No documents yet" hint="Upload drawings, specifications and contracts. Upload the same name again to make a new version." action={<UploadDocumentForm projectId={projectId} existing={existing} />} />
+        <EmptyState title="No documents yet" hint="Add drawings, specifications and contracts. Add the same name again to make a new version." action={<UploadDocumentForm projectId={projectId} existing={existing} />} />
       ) : (
         <ul className="space-y-2">
           {current.map((doc) => {
@@ -103,7 +103,7 @@ export function DocumentsPanel({ projectId, docs }: { projectId: string; docs: D
                     projectId={projectId}
                     existing={existing}
                     defaults={{ name: doc.name, type: doc.type, trade: doc.trade ?? "" }}
-                    label="Upload new version"
+                    label="Add new version"
                     title={`New version of ${doc.name}`}
                     variant="secondary"
                   />

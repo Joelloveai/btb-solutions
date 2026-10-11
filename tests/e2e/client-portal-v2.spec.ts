@@ -153,7 +153,7 @@ test.describe("client portal v2", () => {
     const photos = page.getByRole("region", { name: "Progress photos" });
     await photos.locator("input[type=file]").setInputFiles(png("rebar.png"));
     await photos.getByLabel("Caption (optional)").fill("Rebar tied");
-    await photos.getByRole("button", { name: "Upload photo" }).click();
+    await photos.getByRole("button", { name: "Save photo" }).click();
     await expect(photos.getByText("Rebar tied")).toBeVisible();
     await forClient(page);
     for (const log of [

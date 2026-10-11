@@ -106,7 +106,7 @@ export default async function ClientProjectPage({ params }: { params: { id: stri
   return (
     <>
       <PortalHeader title="Your project" home="/client/projects" signOutTo="/client/login" />
-      <Link href="/client/projects" className="mb-3 inline-flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground print:hidden">
+      <Link href="/client/projects" className="min-h-12 mb-3 inline-flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground print:hidden">
         <ChevronLeft className="h-4 w-4" aria-hidden="true" />
         All projects
       </Link>
