@@ -43,3 +43,33 @@ describe("document names", () => {
     expect(safeDownloadName("", "pdf")).toBe("document.pdf");
   });
 });
+
+import { dailySummary, dueBucket } from "@/lib/schedule";
+
+describe("dueBucket", () => {
+  const today = new Date("2026-10-11T00:00:00.000Z");
+  const day = (n: number) => new Date(today.getTime() + n * 86_400_000);
+  it("sorts due dates into overdue, today, this week and later", () => {
+    expect([-30, -1, 0, 1, 6, 7, 40].map((n) => dueBucket(day(n), today))).toEqual(["overdue", "overdue", "today", "week", "week", "later", "later"]);
+  });
+});
+
+describe("dailySummary", () => {
+  const today = new Date("2026-10-11T00:00:00.000Z");
+  const now = new Date("2026-10-11T03:00:00.000Z");
+  const day = (n: number) => new Date(today.getTime() + n * 86_400_000);
+  const hoursAgo = (h: number) => new Date(now.getTime() - h * 3_600_000);
+  it("counts what is new in the last day, what is due tomorrow, and what is overdue, across tasks and punch items", () => {
+    const tasks = [
+      { status: "OPEN", createdAt: hoursAgo(2), dueDate: day(1) }, // new, due tomorrow
+      { status: "OPEN", createdAt: hoursAgo(80), dueDate: day(-2) }, // old, overdue
+      { status: "DONE", createdAt: hoursAgo(1), dueDate: day(-1) }, // done: never counts
+    ];
+    const punch = [
+      { status: "OPEN", createdAt: hoursAgo(5), dueDate: day(1) }, // new, due tomorrow
+      { status: "OPEN", createdAt: hoursAgo(200), dueDate: null }, // old, no date
+      { status: "CLOSED", createdAt: hoursAgo(1), dueDate: day(-5) },
+    ];
+    expect(dailySummary(tasks, punch, now, today)).toEqual({ newTasks: 1, dueTomorrow: 2, overdue: 1, newPunch: 1 });
+  });
+});
