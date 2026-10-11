@@ -1,0 +1,11 @@
+-- AlterTable
+ALTER TABLE "Photo" ADD COLUMN "accuracy" REAL;
+ALTER TABLE "Photo" ADD COLUMN "capturedAt" DATETIME;
+ALTER TABLE "Photo" ADD COLUMN "checklistItem" TEXT;
+ALTER TABLE "Photo" ADD COLUMN "latitude" REAL;
+ALTER TABLE "Photo" ADD COLUMN "location" TEXT;
+ALTER TABLE "Photo" ADD COLUMN "longitude" REAL;
+ALTER TABLE "Photo" ADD COLUMN "phase" TEXT;
+ALTER TABLE "Photo" ADD COLUMN "sha256" TEXT;
+ALTER TABLE "Photo" ADD COLUMN "trade" TEXT;
+

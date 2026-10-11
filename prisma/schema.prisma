@@ -199,19 +199,34 @@ model ClientUser {
 /// An uploaded image. The file lives on disk (UPLOAD_DIR); only metadata is stored here.
 /// kind: PROGRESS (shown to the client), FLOORPLAN (shown to the client), TASK (subcontractor update, staff only).
 model Photo {
-  id              String   @id @default(cuid())
+  id              String    @id @default(cuid())
   projectId       String
-  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  kind            String   @default("PROGRESS")
+  project         Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  kind            String    @default("PROGRESS")
   caption         String?
   mimeType        String
   size            Int
-  takenAt         DateTime @default(now())
+  takenAt         DateTime  @default(now())
   uploadedById    String?
   task            Task?
-  createdAt       DateTime @default(now())
+  createdAt       DateTime  @default(now())
+  /// Evidence metadata. capturedAt is the DEVICE clock when the photo was taken; createdAt is the server clock when it arrived.
+  capturedAt      DateTime?
+  latitude        Float?
+  longitude       Float?
+  /// GPS accuracy in metres, as reported by the phone.
+  accuracy        Float?
+  /// One of PHOTO_TRADES / PHOTO_PHASES in lib/constants.ts
+  trade           String?
+  phase           String?
+  /// Free text, e.g. "Level 3, Unit 12, Master Bath". Used to compare the same spot on different dates.
+  location        String?
+  /// Which "before cover" checklist item this photo satisfies (see BEFORE_COVER_ITEMS).
+  checklistItem   String?
+  /// SHA-256 of the stored file, computed on arrival, so a later evidence package can prove the file is unchanged.
+  sha256          String?
   /// Set by offline-capable clients. A retried upload with the same id is recognised and not applied twice.
-  clientRequestId String?  @unique
+  clientRequestId String?   @unique
 }
 
 /// A job for a subcontractor (or the contractor's own crew when subcontractorId is empty).

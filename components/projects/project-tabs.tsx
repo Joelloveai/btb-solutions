@@ -18,6 +18,10 @@ import { DeleteIconButton } from "@/components/forms/row-actions";
 import { MarkPaidButton } from "@/components/subcons/mark-paid-button";
 import type { Lookups } from "./lookups";
 import { PendingOps } from "@/components/offline/pending-ops";
+import { BeforeCoverChecklist } from "@/components/photos/before-cover-checklist";
+import { linkButton } from "@/components/ui/button";
+import { BEFORE_COVER_ITEMS } from "@/lib/constants";
+import { Download } from "lucide-react";
 import { PhotoGallery, type PhotoItem } from "@/components/photos/photo-gallery";
 import { PhotoUpload } from "@/components/photos/photo-upload";
 import { TasksPanel, type TaskRow } from "@/components/tasks/tasks-panel";
@@ -102,6 +106,7 @@ export function ProjectTabs({
   unallocatedActual,
   lookups,
   photos,
+  checklistCounts,
   floorPlans,
   tasks,
 }: {
@@ -114,10 +119,13 @@ export function ProjectTabs({
   unallocatedActual: number;
   lookups: Lookups;
   photos: PhotoItem[];
+  /** How many photos each "before cover" item already has. */
+  checklistCounts: Record<string, number>;
   floorPlans: PhotoItem[];
   tasks: TaskRow[];
 }) {
   const t = useT();
+  const beforeCoverMissing = BEFORE_COVER_ITEMS.filter((item) => !checklistCounts[item.key]).length;
 
   return (
     <Tabs defaultValue="costs" className="w-full">
@@ -125,6 +133,11 @@ export function ProjectTabs({
         {TABS.map((item) => (
           <TabsTrigger key={item.id} value={item.id} className="shrink-0 flex-1 px-3">
             {item.label in t ? t[item.label as keyof typeof t] : item.label}
+            {item.id === "photos" && beforeCoverMissing > 0 ? (
+              <span aria-hidden="true" className="ml-1.5 rounded-full bg-pending-light px-1.5 text-[10px] font-semibold text-pending-dark">
+                {beforeCoverMissing}
+              </span>
+            ) : null}
           </TabsTrigger>
         ))}
       </TabsList>
@@ -144,10 +157,18 @@ export function ProjectTabs({
       </TabsContent>
       <TabsContent value="photos">
         <div className="space-y-6">
+          <BeforeCoverChecklist projectId={projectId} counts={checklistCounts} />
           <section aria-label="Progress photos" className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold">Progress photos</h3>
+              <a href={`/api/projects/${projectId}/evidence`} download className={linkButton("secondary", true)}>
+                <Download className="h-4 w-4" aria-hidden="true" />
+                Download Evidence Package
+              </a>
+            </div>
             <PendingOps projectId={projectId} types={["uploadPhoto"]} />
             <PhotoUpload kind="PROGRESS" projectId={projectId} label="Add progress photo" />
-            <PhotoGallery photos={photos} canDelete emptyText="No progress photos yet. Photos you add here appear in the client's portal." />
+            <PhotoGallery photos={photos} canDelete organize compare emptyText="No progress photos yet. Photos you add here appear in the client's portal." />
           </section>
           <section aria-label="Floor plans" className="space-y-3">
             <h3 className="text-sm font-semibold">Floor plans</h3>

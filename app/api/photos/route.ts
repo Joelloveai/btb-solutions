@@ -1,5 +1,8 @@
+import { createHash } from "node:crypto";
 import { getServerSession } from "next-auth";
 import { authOptions, roleOf } from "@/lib/auth";
+import { parsePhotoMetadata } from "@/lib/photo-metadata";
+import { tradeTagFor } from "@/lib/trade-tag";
 import { MAX_PHOTO_BYTES, deletePhotoFile, detectImageType, savePhotoFile } from "@/lib/photos";
 import { prisma } from "@/lib/prisma";
 
@@ -41,10 +44,14 @@ export async function POST(request: Request) {
     if (existing) return json({ id: existing.id }, 200);
   }
 
+  const metadata = parsePhotoMetadata(form);
+  if (!metadata.ok) return json({ error: metadata.error }, 400);
+
   const kind = String(form.get("kind") ?? "PROGRESS");
   const caption = String(form.get("caption") ?? "").trim().slice(0, 200) || null;
 
   let projectId: string;
+  let defaultTrade: string | null = null;
   if (kind === "TASK") {
     const task = await prisma.task.findUnique({ where: { id: String(form.get("taskId") ?? "") } });
     if (!task) return json({ error: "Task not found." }, 404);
@@ -52,6 +59,9 @@ export async function POST(request: Request) {
       const user = session?.user?.id ? await prisma.user.findUnique({ where: { id: session.user.id } }) : null;
       if (!user?.subcontractorId || task.subcontractorId !== user.subcontractorId) return json({ error: "Not allowed." }, 403);
       if (task.status !== "OPEN") return json({ error: "This task is already done." }, 409);
+      // A subcontractor's photo is filed under their own trade without them having to pick it.
+      const sub = await prisma.subcontractor.findUnique({ where: { id: user.subcontractorId } });
+      defaultTrade = tradeTagFor(sub?.trade);
     }
     projectId = task.projectId;
   } else {
@@ -65,7 +75,18 @@ export async function POST(request: Request) {
   let photo;
   try {
     photo = await prisma.photo.create({
-      data: { projectId, kind, caption, mimeType, size: file.size, uploadedById: session?.user?.id ?? null, clientRequestId: requestId },
+      data: {
+        projectId,
+        kind,
+        caption,
+        mimeType,
+        size: file.size,
+        uploadedById: session?.user?.id ?? null,
+        clientRequestId: requestId,
+        ...metadata.data,
+        trade: metadata.data.trade ?? defaultTrade,
+        sha256: createHash("sha256").update(bytes).digest("hex"),
+      },
     });
   } catch (error) {
     // Two copies of the same retry racing each other: the loser just returns the winner's photo.

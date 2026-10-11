@@ -35,7 +35,11 @@ export default async function ClientProjectPage({ params }: { params: { id: stri
   if (!project) notFound();
 
   const pct = completionPercent(project.tasks);
-  const item = (p: { id: string; caption: string | null; takenAt: Date }) => ({ id: p.id, caption: p.caption, takenAtText: formatDateTime(p.takenAt) });
+  // What the client sees: when it was taken, which phase and trade, and where on site. Never GPS coordinates.
+  const item = (p: (typeof project.photos)[number]) => {
+    const taken = p.capturedAt ?? p.takenAt;
+    return { id: p.id, caption: p.caption, takenAtText: formatDateTime(taken), takenAtMs: taken.getTime(), phase: p.phase, trade: p.trade, location: p.location };
+  };
   const progress = project.photos.filter((p) => p.kind === "PROGRESS").map(item);
   const plans = project.photos.filter((p) => p.kind === "FLOORPLAN").map(item);
 
@@ -67,7 +71,7 @@ export default async function ClientProjectPage({ params }: { params: { id: stri
 
       <section className="mb-8" aria-label="Progress photos">
         <h2 className="mb-3 text-base font-semibold">Progress photos</h2>
-        <PhotoGallery photos={progress} emptyText="No photos yet. Your contractor will add them as work progresses." />
+        <PhotoGallery photos={progress} compare emptyText="No photos yet. Your contractor will add them as work progresses." />
       </section>
 
       <section className="mb-8" aria-label="Floor plans">

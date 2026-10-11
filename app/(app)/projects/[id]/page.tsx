@@ -51,11 +51,31 @@ export default async function ProjectPage({ params }: { params: { id: string } }
   const contractWithSst = new Prisma.Decimal(totals.revisedContractValue).plus(totals.sstAmount).toNumber();
   const inProfit = totals.profitLoss >= 0;
   const status = project.status as ProjectStatus;
-  const toPhotoItem = (p: { id: string; caption: string | null; takenAt: Date }) => ({
-    id: p.id,
-    caption: p.caption,
-    takenAtText: formatDateTime(p.takenAt, locale),
-  });
+  // Photos show when they were TAKEN (the phone's clock) and say so when they reached the server much later.
+  const toPhotoItem = (p: (typeof project.photos)[number]) => {
+    const taken = p.capturedAt ?? p.takenAt;
+    const lateMs = p.capturedAt ? p.createdAt.getTime() - p.capturedAt.getTime() : 0;
+    const hasGps = p.latitude !== null && p.longitude !== null;
+    return {
+      id: p.id,
+      caption: p.caption,
+      takenAtText: formatDateTime(taken, locale),
+      takenAtMs: taken.getTime(),
+      uploadedLaterText: lateMs > 30 * 60 * 1000 ? formatDateTime(p.createdAt, locale) : null,
+      phase: p.phase,
+      trade: p.trade,
+      location: p.location,
+      gps: hasGps
+        ? {
+            text: `${p.latitude!.toFixed(5)}, ${p.longitude!.toFixed(5)}${p.accuracy !== null ? ` ±${Math.round(p.accuracy)} m` : ""}`,
+            href: `https://www.openstreetmap.org/?mlat=${p.latitude}&mlon=${p.longitude}#map=18/${p.latitude}/${p.longitude}`,
+          }
+        : null,
+    };
+  };
+  const progressPhotos = project.photos.filter((p) => p.kind === "PROGRESS");
+  const checklistCounts: Record<string, number> = {};
+  for (const photo of progressPhotos) if (photo.checklistItem) checklistCounts[photo.checklistItem] = (checklistCounts[photo.checklistItem] ?? 0) + 1;
 
   const boqLabel = (id: string | null) => {
     const i = project.boqLines.findIndex((b) => b.id === id);
@@ -184,13 +204,14 @@ export default async function ProjectPage({ params }: { params: { id: string } }
             status: t.status,
             subcontractorName: t.subcontractor?.name ?? null,
           })),
-          photos: project.photos.filter((p) => p.kind === "PROGRESS").map(toPhotoItem),
+          photos: progressPhotos.map((p) => ({ id: p.id, caption: p.caption, takenAtText: toPhotoItem(p).takenAtText })),
         }}
       />
 
       <ProjectTabs
         projectId={project.id}
-        photos={project.photos.filter((p) => p.kind === "PROGRESS").map(toPhotoItem)}
+        photos={progressPhotos.map(toPhotoItem)}
+        checklistCounts={checklistCounts}
         floorPlans={project.photos.filter((p) => p.kind === "FLOORPLAN").map(toPhotoItem)}
         tasks={project.tasks.map((task) => ({
           id: task.id,

@@ -64,3 +64,41 @@ export async function staffPage(browser: Browser) {
   await login(v.page);
   return v;
 }
+
+/** Staff on a phone that has allowed location access and is standing in Kuala Lumpur. */
+export async function staffPageWithGps(browser: Browser) {
+  const context = await browser.newContext({
+    geolocation: { latitude: 3.139, longitude: 101.6869, accuracy: 15 },
+    permissions: ["geolocation"],
+  });
+  const page = await context.newPage();
+  // The first request to a cold dev server can click "Sign in" before the page has hydrated: try once more.
+  await page.goto("/login");
+  await page.getByLabel("Email").fill("boss@btb.my");
+  await page.getByLabel("Password").fill("btb12345");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  try {
+    await expect(page).toHaveURL(/\/dashboard/, { timeout: 8000 });
+  } catch {
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await expect(page).toHaveURL(/\/dashboard/);
+  }
+  return { context, page };
+}
+
+/**
+ * Attach a photo whose file time is `daysAgo` days in the past, as a photo taken earlier would be.
+ * (Playwright cannot set a file's modified time, so the file is built inside the page.)
+ */
+export async function attachPhotoTakenDaysAgo(page: Page, inputLabel: string, daysAgo: number, name = "site.png") {
+  await page.getByLabel(inputLabel, { exact: true }).evaluate(
+    (input: HTMLInputElement, args: { base64: string; name: string; modified: number }) => {
+      const bytes = Uint8Array.from(atob(args.base64), (c) => c.charCodeAt(0));
+      const transfer = new DataTransfer();
+      transfer.items.add(new File([bytes], args.name, { type: "image/png", lastModified: args.modified }));
+      input.files = transfer.files;
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    },
+    { base64: PNG.toString("base64"), name, modified: Date.now() - daysAgo * 24 * 60 * 60 * 1000 },
+  );
+}
