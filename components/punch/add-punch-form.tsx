@@ -9,6 +9,7 @@ import { shrink } from "@/components/photos/shrink";
 import { useOfflineSubmit } from "@/components/offline/use-offline-submit";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/field";
+import { VoiceInput } from "@/components/ui/voice-input";
 import { ModalButton } from "@/components/ui/modal";
 import { PHOTO_TRADES } from "@/lib/constants";
 import { toStoredFile } from "@/lib/offline/files";
@@ -64,7 +65,7 @@ function Form({ projectId, lookups, close }: { projectId: string; lookups: Looku
         <Input {...register("location")} placeholder="e.g. Level 3, Unit 12, Master Bath" />
       </Field>
       <Field label="What needs fixing" error={errors.description?.message}>
-        <Input {...register("description")} placeholder="e.g. Cracked tile by the shower" />
+        <VoiceInput {...register("description")} placeholder="e.g. Cracked tile by the shower" />
       </Field>
       <div className="grid grid-cols-2 gap-2">
         <Field label="Trade" error={errors.trade?.message}>

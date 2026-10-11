@@ -67,6 +67,7 @@ test("a quote runs the whole money loop with no manual step in between", async (
   await dialog.getByLabel("Description").fill("Plumbing works");
   await dialog.getByLabel("Amount (RM)").fill("30000");
   await dialog.getByLabel("Subcontractor").selectOption({ label: subName });
+  await dialog.getByText("More", { exact: true }).click();
   await dialog.getByLabel("BOQ line (optional)").selectOption({ index: 1 });
   await dialog.getByRole("button", { name: "Save cost" }).click();
   await expect(dialog).toBeHidden();

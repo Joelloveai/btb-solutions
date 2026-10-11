@@ -23,3 +23,5 @@ Documents: `Document` rows are versions. Uploading a name that already exists in
 
 
 Client portal: staff use the "For Client" tab (stage, payment schedule, selections, daily log) and "Send to client" on change orders. Clients approve/reject through `decideChangeOrder` / `approveSelection`; these need connectivity on purpose (the time is the server's). The payment schedule is derived from recorded payments, never entered separately.
+
+Field UI: the cost form shows only Amount, Category, Description (plus Subcontractor for SUBCON); date, BOQ line, vendor and reference sit under "More". Description-style fields use `components/ui/voice-input.tsx` (native SpeechRecognition; hidden if unsupported). Shared controls are 48px tall on phones (`h-12 md:h-10`); keep that for new buttons and inputs.

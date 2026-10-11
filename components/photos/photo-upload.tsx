@@ -4,6 +4,7 @@ import { Camera, MapPin, MapPinOff } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/field";
+import { VoiceInput } from "@/components/ui/voice-input";
 import { PHOTO_PHASES, PHOTO_TRADES } from "@/lib/constants";
 import { captureLocation, type Geo } from "@/lib/offline/geo";
 import { useOfflineSubmit } from "@/components/offline/use-offline-submit";
@@ -179,7 +180,7 @@ export function PhotoUpload({
           ) : null}
           {withCaption ? (
             <Field label="Caption (optional)">
-              <Input value={caption} onChange={(event) => setCaption(event.target.value)} maxLength={200} placeholder="e.g. Kitchen tiling finished" />
+              <VoiceInput value={caption} onChange={(event) => setCaption(event.target.value)} maxLength={200} placeholder="e.g. Kitchen tiling finished" />
             </Field>
           ) : null}
           <Button type="button" onClick={upload} disabled={busy} className="w-full">

@@ -6,6 +6,7 @@ import { useOfflineSubmit } from "@/components/offline/use-offline-submit";
 import type { Lookups } from "@/components/projects/lookups";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/field";
+import { VoiceInput } from "@/components/ui/voice-input";
 import { ModalButton } from "@/components/ui/modal";
 import { todayInputValue } from "@/lib/format";
 import { taskSchema, type TaskInput } from "@/lib/validators";
@@ -26,7 +27,7 @@ function Form({ projectId, lookups, close }: { projectId: string; lookups: Looku
   return (
     <form onSubmit={handleSubmit((v) => submit({ type: "createTask", projectId, label: `Task: ${v.description}`, payload: { input: v } }))} className="space-y-3">
       <Field label="Task or milestone" error={errors.description?.message}>
-        <Input {...register("description")} placeholder="e.g. Rewire kitchen" />
+        <VoiceInput {...register("description")} placeholder="e.g. Rewire kitchen" />
       </Field>
       <label className="flex min-h-11 items-center gap-3 text-sm">
         <input type="checkbox" {...register("isMilestone")} className="h-5 w-5 rounded border-input accent-primary" />

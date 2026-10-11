@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Field, Input, Select } from "@/components/ui/field";
+import { VoiceInput } from "@/components/ui/voice-input";
 import { ModalButton } from "@/components/ui/modal";
 import { PROJECT_STAGES, SELECTION_CATEGORIES } from "@/lib/constants";
 import { todayInputValue } from "@/lib/format";
@@ -120,7 +121,7 @@ function SelectionForm({ projectId, close }: { projectId: string; close: () => v
         <Input {...register("name")} placeholder="e.g. Grey matt tile 600x600" />
       </Field>
       <Field label="Details (optional)" error={errors.details?.message}>
-        <Input {...register("details")} placeholder="Supplier, colour code, size" />
+        <VoiceInput {...register("details")} placeholder="Supplier, colour code, size" />
       </Field>
       <input ref={photo} type="file" accept="image/*" className="sr-only" aria-label="Photo of the product" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
       <Button type="button" variant="secondary" className="w-full" onClick={() => photo.current?.click()}>
@@ -148,7 +149,7 @@ function LogForm({ projectId, close }: { projectId: string; close: () => void })
         <Input {...register("date")} type="date" />
       </Field>
       <Field label="What happened on site" error={errors.note?.message}>
-        <Input {...register("note")} placeholder="e.g. Kitchen tiling started; wiring inspected" />
+        <VoiceInput {...register("note")} placeholder="e.g. Kitchen tiling started; wiring inspected" />
       </Field>
       <p className="text-xs text-muted-foreground">The client can read this, with the photos taken that day.</p>
       <Button type="submit" className="w-full" disabled={pending}>

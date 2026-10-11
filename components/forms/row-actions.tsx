@@ -8,7 +8,7 @@ import { Modal } from "@/components/ui/modal";
 import { useSubmit } from "./use-submit";
 
 const iconButton =
-  "flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "flex h-12 w-12 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 export function EditIconButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (

@@ -6,6 +6,7 @@ import { addChangeOrder, updateChangeOrder } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import type { Lookups } from "@/components/projects/lookups";
 import { Field, Input, Select } from "@/components/ui/field";
+import { VoiceInput } from "@/components/ui/voice-input";
 import { Modal, ModalButton } from "@/components/ui/modal";
 import { useCallback, useState } from "react";
 import { EditIconButton } from "./row-actions";
@@ -40,7 +41,7 @@ function Form({
         <Input {...register("date")} type="date" />
       </Field>
       <Field label="Description" error={errors.description?.message}>
-        <Input {...register("description")} placeholder="e.g. Extra kitchen cabinet" />
+        <VoiceInput {...register("description")} placeholder="e.g. Extra kitchen cabinet" />
       </Field>
       <Field label="Amount (RM) — use minus for omissions" error={errors.amount?.message}>
         <Input {...register("amount")} type="number" step="0.01" inputMode="decimal" />

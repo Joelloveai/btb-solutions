@@ -6,6 +6,7 @@ import { useForm } from "react-hook-form";
 import { addBoqLine, updateBoqLine } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
+import { VoiceInput } from "@/components/ui/voice-input";
 import { Modal, ModalButton } from "@/components/ui/modal";
 import { boqLineSchema, type BoqLineInput } from "@/lib/validators";
 import { EditIconButton } from "./row-actions";
@@ -36,7 +37,7 @@ function Form({
       className="space-y-3"
     >
       <Field label="Description" error={errors.description?.message}>
-        <Input {...register("description")} placeholder="e.g. Floor tiling" />
+        <VoiceInput {...register("description")} placeholder="e.g. Floor tiling" />
       </Field>
       <div className="grid grid-cols-3 gap-2">
         <Field label="Qty" error={errors.qty?.message}>

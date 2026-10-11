@@ -6,6 +6,7 @@ import type { Lookups } from "@/components/projects/lookups";
 import { updateCost } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/field";
+import { VoiceInput } from "@/components/ui/voice-input";
 import { Modal, ModalButton } from "@/components/ui/modal";
 import { useCallback, useState } from "react";
 import { EditIconButton } from "./row-actions";
@@ -55,8 +56,8 @@ function Form({
         ? update.submit(() => updateCost(editing.id, values))
         : add.submit({ type: "addCost", projectId, label: `Cost: RM ${values.amount} · ${values.description}`, payload: { input: values } }),
     )} className="space-y-3">
-      <Field label="Date" error={errors.date?.message}>
-        <Input {...register("date")} type="date" />
+      <Field label="Amount (RM)" error={errors.amount?.message}>
+        <Input {...register("amount")} type="number" step="0.01" inputMode="decimal" autoFocus />
       </Field>
       <Field label="Category" error={errors.category?.message}>
         <Select {...register("category")}>
@@ -68,10 +69,7 @@ function Form({
         </Select>
       </Field>
       <Field label="Description" error={errors.description?.message}>
-        <Input {...register("description")} placeholder="e.g. Cement 50 bags" />
-      </Field>
-      <Field label="Amount (RM)" error={errors.amount?.message}>
-        <Input {...register("amount")} type="number" step="0.01" inputMode="decimal" />
+        <VoiceInput {...register("description")} placeholder="e.g. Cement 50 bags" />
       </Field>
       {category === "SUBCON" ? (
         <Field label="Subcontractor" error={errors.subcontractorId?.message}>
@@ -85,24 +83,35 @@ function Form({
           </Select>
         </Field>
       ) : null}
-      {lookups.boqLines.length > 0 ? (
-        <Field label="BOQ line (optional)" error={errors.boqLineId?.message}>
-          <Select {...register("boqLineId")}>
-            <option value="">— Not linked —</option>
-            {lookups.boqLines.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.label}
-              </option>
-            ))}
-          </Select>
-        </Field>
-      ) : null}
-      <Field label="Vendor (optional)" error={errors.vendor?.message}>
-        <Input {...register("vendor")} />
-      </Field>
-      <Field label="Reference (optional)" error={errors.reference?.message}>
-        <Input {...register("reference")} />
-      </Field>
+      <details className="group rounded-md border border-input" open={Boolean(editing)}>
+        <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between px-3 text-sm font-medium">
+          <span>More</span>
+          <span className="text-muted-foreground group-open:hidden">date, vendor, reference</span>
+        </summary>
+        <div className="space-y-3 px-3 pb-3">
+          <Field label="Date" error={errors.date?.message}>
+            <Input {...register("date")} type="date" />
+          </Field>
+          {lookups.boqLines.length > 0 ? (
+            <Field label="BOQ line (optional)" error={errors.boqLineId?.message}>
+              <Select {...register("boqLineId")}>
+                <option value="">— Not linked —</option>
+                {lookups.boqLines.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          ) : null}
+          <Field label="Vendor (optional)" error={errors.vendor?.message}>
+            <Input {...register("vendor")} />
+          </Field>
+          <Field label="Reference (optional)" error={errors.reference?.message}>
+            <Input {...register("reference")} />
+          </Field>
+        </div>
+      </details>
       <Button type="submit" className="w-full" disabled={pending}>
         {pending ? "Saving…" : "Save cost"}
       </Button>

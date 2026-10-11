@@ -39,7 +39,7 @@ export function LanguageToggle({ current }: { current: Locale }) {
             disabled={pending}
             onClick={() => choose(o.value)}
             className={clsx(
-              "h-10 rounded-md text-sm font-medium",
+              "h-12 rounded-md text-sm font-medium",
               current === o.value ? "bg-background font-semibold text-foreground shadow-sm" : "text-muted-foreground",
             )}
           >

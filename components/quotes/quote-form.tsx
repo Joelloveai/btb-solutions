@@ -10,6 +10,7 @@ import { useLocale } from "@/components/locale-provider";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Field, Input, Select, Textarea } from "@/components/ui/field";
+import { VoiceInput } from "@/components/ui/voice-input";
 import { QUOTE_STATUSES, QUOTE_STATUS_LABELS } from "@/lib/constants";
 import { formatRM, todayInputValue } from "@/lib/format";
 import { calculateQuote } from "@/lib/quotes";
@@ -97,7 +98,7 @@ export function QuoteForm({ quoteId, values }: { quoteId?: string; values?: Quot
           return (
             <Card key={field.id} className="space-y-3 p-4">
               <Field label="Description" error={lineErrors?.description?.message}>
-                <Input {...register(`lines.${index}.description`)} placeholder="e.g. Supply and lay floor tiles" />
+                <VoiceInput {...register(`lines.${index}.description`)} placeholder="e.g. Supply and lay floor tiles" />
               </Field>
               <div className="grid grid-cols-3 gap-2">
                 <Field label="Qty" error={lineErrors?.qty?.message}>

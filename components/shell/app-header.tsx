@@ -15,7 +15,7 @@ export function AppHeader({ email }: { email: string }) {
       <CompanyBar />
       <div className="flex h-12 items-center justify-between border-b bg-card px-3 lg:px-6">
         <div className="flex items-center gap-1">
-          <Button variant="ghost" small className="h-10 w-10 px-0 md:hidden" aria-label="Open menu" onClick={() => setMobileOpen(true)}>
+          <Button variant="ghost" small className="h-12 w-12 px-0 md:hidden" aria-label="Open menu" onClick={() => setMobileOpen(true)}>
             <Menu className="h-5 w-5" aria-hidden="true" />
           </Button>
           <Button

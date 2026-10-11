@@ -67,11 +67,12 @@ test.describe("client portal v2", () => {
     await expect(c.getByRole("region", { name: "Product selections" })).toBeVisible(); // selections are made for the client
 
     await page.getByRole("tab", { name: "Change Orders" }).click();
-    await page.getByRole("listitem").first(); // (no-op: rows are table rows)
-    await page.getByRole("button", { name: "Send to client" }).first().click();
-    await expect(page.getByText("Sent to the client for approval")).toBeVisible();
-    await page.getByRole("button", { name: "Send to client" }).first().click();
-    await expect(page.getByText("Sent to the client for approval").last()).toBeVisible();
+    const send = page.getByRole("button", { name: "Send to client" });
+    await expect(send).toHaveCount(2);
+    await send.first().click();
+    await expect(send).toHaveCount(1);
+    await send.first().click();
+    await expect(send).toHaveCount(0);
 
     await c.reload();
     const orders = c.getByRole("region", { name: "Change orders" });

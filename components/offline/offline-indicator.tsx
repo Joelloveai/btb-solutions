@@ -40,7 +40,7 @@ export function OfflineIndicator() {
           </span>
         </span>
         {pending + failed > 0 ? (
-          <button type="button" onClick={() => setOpen(true)} className="shrink-0 rounded px-2 py-1.5 underline underline-offset-2">
+          <button type="button" onClick={() => setOpen(true)} className="shrink-0 min-h-12 rounded px-3 underline underline-offset-2">
             View
           </button>
         ) : null}
