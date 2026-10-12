@@ -1,4 +1,5 @@
 import { getServerSession } from "next-auth";
+import { can } from "@/lib/permissions";
 import { authOptions, roleOf } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
@@ -34,6 +35,7 @@ const day = (date: Date | null) => (date ? date.toISOString().slice(0, 10) : "")
 export async function GET() {
   const session = await getServerSession(authOptions);
   if (roleOf(session) !== "staff") return new Response("Not signed in", { status: 401 });
+  if (!can(session?.user?.staffRole, "financials.view")) return new Response("Not allowed", { status: 403 });
 
   const projects = await prisma.project.findMany({
     orderBy: { createdAt: "asc" },

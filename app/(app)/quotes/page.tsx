@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requireFinancialsPage } from "@/lib/guards";
 import { linkButton } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { QuotesTable } from "@/components/quotes/quotes-table";
@@ -12,6 +13,7 @@ import { calculateQuote, quoteNumber } from "@/lib/quotes";
 export const dynamic = "force-dynamic";
 
 export default async function QuotesPage() {
+  await requireFinancialsPage();
   const { locale, t } = await getT();
   const quotes = await prisma.quote.findMany({ include: { lines: true }, orderBy: { number: "desc" } });
   const newLink = (

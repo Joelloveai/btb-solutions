@@ -66,7 +66,7 @@ export function DataTable<TData>({
                         type="button"
                         onClick={header.column.getToggleSortingHandler()}
                         className={cn(
-                          "inline-flex items-center gap-1 uppercase tracking-wide hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                          "inline-flex min-h-12 items-center gap-1 uppercase tracking-wide md:min-h-0 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                           meta?.numeric && "flex-row-reverse",
                         )}
                       >
@@ -94,7 +94,7 @@ export function DataTable<TData>({
               {row.getVisibleCells().map((cell) => {
                 const meta = cell.column.columnDef.meta;
                 return (
-                  <TableCell key={cell.id} className={cn(meta?.numeric && "whitespace-nowrap text-right font-mono text-[13px] tabular-nums", meta?.className)}>
+                  <TableCell key={cell.id} className={cn("[&_a]:inline-flex [&_a]:min-h-12 [&_a]:items-center md:[&_a]:min-h-0", meta?.numeric && "whitespace-nowrap text-right font-mono text-[13px] tabular-nums", meta?.className)}>
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </TableCell>
                 );

@@ -11,10 +11,11 @@ async function main() {
 
   await prisma.user.upsert({
     where: { email },
-    update: { passwordHash: await bcrypt.hash(password, 10) },
+    update: { passwordHash: await bcrypt.hash(password, 10), role: "ADMIN", isActive: true, mustChangePassword: false },
     create: {
       email,
       name: "BTB Builders",
+      role: "ADMIN",
       passwordHash: await bcrypt.hash(password, 10),
     },
   });

@@ -126,7 +126,7 @@ export function CostFormBody({
 
 export function AddCostForm({ projectId, lookups }: { projectId: string; lookups: Lookups }) {
   return (
-    <ModalButton label="+ Add Cost" title="Add cost">
+    <ModalButton requires="field.write" label="+ Add Cost" title="Add cost">
       {(close) => <CostFormBody projectId={projectId} lookups={lookups} close={close} />}
     </ModalButton>
   );

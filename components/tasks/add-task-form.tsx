@@ -62,7 +62,7 @@ function Form({ projectId, lookups, close }: { projectId: string; lookups: Looku
 
 export function AddTaskForm({ projectId, lookups }: { projectId: string; lookups: Lookups }) {
   return (
-    <ModalButton label="+ Add Task" title="Add task">
+    <ModalButton requires="field.write" label="+ Add Task" title="Add task">
       {(close) => <Form projectId={projectId} lookups={lookups} close={close} />}
     </ModalButton>
   );

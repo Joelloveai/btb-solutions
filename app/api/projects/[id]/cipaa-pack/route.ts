@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { getServerSession } from "next-auth";
+import { can } from "@/lib/permissions";
 import { authOptions, roleOf } from "@/lib/auth";
 import { buildCipaaPack } from "@/lib/cipaa-pack";
 import { saveDocumentFile } from "@/lib/document-storage";
@@ -18,6 +19,7 @@ export const maxDuration = 120;
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
   if (roleOf(session) !== "staff") return new Response("Not signed in", { status: 401 });
+  if (!can(session?.user?.staffRole, "financials.view")) return new Response("Not allowed", { status: 403 });
   const claimId = new URL(request.url).searchParams.get("claimId");
   const actor = actorFromSession(session);
   const pack = await buildCipaaPack(params.id, claimId, actor.name ?? "staff");

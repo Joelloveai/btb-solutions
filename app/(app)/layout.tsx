@@ -2,6 +2,8 @@ import { getServerSession } from "next-auth";
 import { LocaleProvider } from "@/components/locale-provider";
 import { OfflineProvider } from "@/components/offline/offline-provider";
 import { CaptureFab } from "@/components/capture/capture-fab";
+import { PermissionsProvider } from "@/components/permissions-provider";
+import { can } from "@/lib/permissions";
 import { AppShell } from "@/components/shell/app-shell";
 import { redirect } from "next/navigation";
 import { authOptions, homeFor, roleOf } from "@/lib/auth";
@@ -21,8 +23,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <LocaleProvider locale={locale}>
       <OfflineProvider userKey={session?.user?.email ?? "staff"} warmUrls={warmUrls}>
-        <AppShell email={session?.user?.email ?? ""}>{children}</AppShell>
-        <CaptureFab role="staff" projects={captureProjects} />
+        <PermissionsProvider role={session?.user?.staffRole ?? null}>
+          <AppShell email={session?.user?.email ?? ""}>{children}</AppShell>
+          {can(session?.user?.staffRole, "field.write") ? <CaptureFab role="staff" projects={captureProjects} /> : null}
+        </PermissionsProvider>
       </OfflineProvider>
     </LocaleProvider>
   );

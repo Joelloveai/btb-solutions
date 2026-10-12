@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { requireFinancialsPage } from "@/lib/guards";
 import { QuoteForm } from "@/components/quotes/quote-form";
 
-export default function NewQuotePage() {
+export default async function NewQuotePage() {
+  await requireFinancialsPage();
   return (
     <div className="mx-auto max-w-2xl">
       <Link href="/quotes" className="text-sm font-medium text-foreground">

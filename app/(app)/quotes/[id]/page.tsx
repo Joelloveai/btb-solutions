@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requireFinancialsPage } from "@/lib/guards";
 import { notFound } from "next/navigation";
 import { QuoteActions } from "@/components/quotes/quote-actions";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +19,7 @@ export const dynamic = "force-dynamic";
 const tone = { DRAFT: "gray", SENT: "blue", ACCEPTED: "green", REJECTED: "red" } as const;
 
 export default async function QuotePage({ params }: { params: { id: string } }) {
+  await requireFinancialsPage();
   const quote = await prisma.quote.findUnique({ where: { id: params.id }, include: { lines: { orderBy: { position: "asc" } } } });
   if (!quote) notFound();
   const locale = await getLocale();

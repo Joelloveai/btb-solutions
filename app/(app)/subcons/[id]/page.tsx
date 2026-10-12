@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requireFinancialsPage } from "@/lib/guards";
 import { notFound } from "next/navigation";
 import { EditSubcontractorButton } from "@/components/forms/subcontractor-form";
 import { MarkPaidButton } from "@/components/subcons/mark-paid-button";
@@ -16,6 +17,7 @@ import { Prisma } from "@prisma/client";
 export const dynamic = "force-dynamic";
 
 export default async function SubconPage({ params }: { params: { id: string } }) {
+  await requireFinancialsPage();
   const sub = await prisma.subcontractor.findUnique({
     where: { id: params.id },
     include: {

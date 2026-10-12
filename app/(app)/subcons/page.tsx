@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requireFinancialsPage } from "@/lib/guards";
 import { AddSubcontractorForm } from "@/components/forms/subcontractor-form";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
@@ -11,6 +12,7 @@ import { Prisma } from "@prisma/client";
 export const dynamic = "force-dynamic";
 
 export default async function SubconsPage() {
+  await requireFinancialsPage();
   const { locale, t } = await getT();
   const money = (n: number) => formatRM(n, locale);
   const subs = await prisma.subcontractor.findMany({

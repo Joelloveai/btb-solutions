@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useState, type ReactNode } from "react";
+import { useCan } from "@/components/permissions-provider";
+import type { Capability } from "@/lib/permissions";
 import { Button } from "./button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./dialog";
 
@@ -33,15 +35,20 @@ export function ModalButton({
   label,
   title,
   variant = "primary",
+  requires = "money.write",
   children,
 }: {
   label: string;
   title: string;
   variant?: "primary" | "secondary";
+  /** Who gets this button. Money screens default to managers and admins; site work passes "field.write". */
+  requires?: Capability;
   children: (close: () => void) => ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
+  const allowed = useCan();
+  if (!allowed(requires)) return null;
 
   return (
     <>

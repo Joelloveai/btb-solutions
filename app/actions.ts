@@ -10,6 +10,7 @@ import { requireClient, requireSession, requireSub } from "@/lib/auth";
 import { deletePhotoFile } from "@/lib/photos";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { can, isStaffRole } from "@/lib/permissions";
 import { calculateTotals } from "@/lib/calculations";
 import { computeClaim } from "@/lib/claims";
 import { PROJECT_STAGES } from "@/lib/constants";
@@ -68,6 +69,8 @@ function failure(error: unknown): ActionResult<never> {
   if (error instanceof Error && error.message === "Not signed in") {
     return { ok: false, error: "Please sign in again." };
   }
+  if (error instanceof Error && error.message === "Not allowed") return { ok: false, error: "You do not have permission to do that." };
+  if (error instanceof Error && error.message === "Change password first") return { ok: false, error: "Please choose your own password first (open Profile)." };
   console.error(error);
   return { ok: false, error: "Something went wrong. Please try again." };
 }
@@ -140,7 +143,7 @@ export async function updateProject(id: string, input: unknown): Promise<ActionR
 
 export async function setLocale(locale: unknown): Promise<ActionResult> {
   try {
-    const session = await requireSession();
+    const session = await requireSession("staff.any");
     if (!isLocale(locale)) return { ok: false, error: "Unknown language" };
     await prisma.user.update({
       where: { email: String(session.user?.email).toLowerCase() },
@@ -156,7 +159,7 @@ export async function setLocale(locale: unknown): Promise<ActionResult> {
 export async function addCost(projectId: string, input: unknown, requestId?: string): Promise<ActionResult> {
   const rid = requestIdOf(requestId);
   try {
-    const session = await requireSession();
+    const session = await requireSession("field.write");
     const parsed = costSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
     const v = parsed.data;
@@ -830,7 +833,7 @@ export async function linkProjectToClient(projectId: string): Promise<ActionResu
 export async function createTask(projectId: string, input: unknown, requestId?: string): Promise<ActionResult> {
   const rid = requestIdOf(requestId);
   try {
-    const session = await requireSession();
+    const session = await requireSession("field.write");
     const parsed = taskSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
     const v = parsed.data;
@@ -867,7 +870,7 @@ export async function createTask(projectId: string, input: unknown, requestId?: 
 
 export async function setTaskStatus(id: string, status: unknown): Promise<ActionResult> {
   try {
-    const session = await requireSession();
+    const session = await requireSession("field.write");
     if (status !== "OPEN" && status !== "DONE") return { ok: false, error: "Unknown status" };
     await recorded(async (tx) => {
       const task = await tx.task.update({
@@ -1055,7 +1058,7 @@ export async function deleteSubcontractorUser(id: string): Promise<ActionResult>
 export async function createPunchItem(projectId: string, input: unknown, requestId?: string, photoId?: string): Promise<ActionResult> {
   const rid = requestIdOf(requestId);
   try {
-    const session = await requireSession();
+    const session = await requireSession("field.write");
     const parsed = punchSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
     const v = parsed.data;
@@ -1097,7 +1100,7 @@ export async function createPunchItem(projectId: string, input: unknown, request
 
 export async function assignPunchItem(id: string, subcontractorId: string): Promise<ActionResult> {
   try {
-    const session = await requireSession();
+    const session = await requireSession("field.write");
     await recorded(async (tx) => {
       const item = await tx.punchItem.update({ where: { id }, data: { subcontractorId: orNull(subcontractorId) } });
       await appendEvent(tx, {
@@ -1150,7 +1153,7 @@ export async function resolvePunchItem(id: string, photoId?: string): Promise<Ac
 /** The contractor has looked at the fix and is satisfied. */
 export async function closePunchItem(id: string): Promise<ActionResult> {
   try {
-    const session = await requireSession();
+    const session = await requireSession("field.write");
     await recorded(async (tx) => {
       const item = await tx.punchItem.update({ where: { id }, data: { status: "CLOSED", closedAt: new Date() } });
       await appendEvent(tx, {
@@ -1172,7 +1175,7 @@ export async function closePunchItem(id: string): Promise<ActionResult> {
 /** The fix was not good enough: back to the subcontractor. */
 export async function reopenPunchItem(id: string): Promise<ActionResult> {
   try {
-    const session = await requireSession();
+    const session = await requireSession("field.write");
     await recorded(async (tx) => {
       const item = await tx.punchItem.update({ where: { id }, data: { status: "OPEN", resolvedAt: null, closedAt: null, resolvedPhotoId: null } });
       await appendEvent(tx, {
@@ -1284,7 +1287,7 @@ export async function sendChangeOrderToClient(id: string): Promise<ActionResult>
 export async function addNote(projectId: string, text: unknown, requestId?: string, capturedAtIso?: string): Promise<ActionResult> {
   const rid = requestIdOf(requestId);
   try {
-    const session = await requireSession();
+    const session = await requireSession("field.write");
     const note = typeof text === "string" ? text.trim() : "";
     if (!note) return { ok: false, error: "Write or say something first." };
     if (note.length > 2000) return { ok: false, error: "That note is too long (2,000 characters at most)." };
@@ -1555,7 +1558,7 @@ export async function createSiteDiary(projectId: string, input: unknown, request
   const rid = requestIdOf(requestId);
   let saved: { id: string; fileKey: string; mimeType: string } | null = null;
   try {
-    const session = await requireSession();
+    const session = await requireSession("field.write");
     const parsed = diarySchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
     const v = parsed.data;
@@ -1889,7 +1892,7 @@ export async function replyToClient(projectId: string, body: string, targetType?
 /** What the cost form and the diary need for one project, fetched when the + sheet opens. */
 export async function getCaptureContext(projectId: string): Promise<ActionResult<{ lookups: { boqLines: { id: string; label: string }[]; subcons: { id: string; name: string }[]; claims: { id: string; label: string }[] }; materialCosts: { dateKey: string; description: string }[] }>> {
   try {
-    await requireSession();
+    await requireSession("field.write");
     const [boq, subcons, costs] = await Promise.all([
       prisma.boqLine.findMany({ where: { projectId }, orderBy: { position: "asc" } }),
       prisma.subcontractor.findMany({ orderBy: { name: "asc" } }),
@@ -1917,7 +1920,9 @@ export async function captureSummary(kind: "photo" | "cost", projectId: string):
       const n = await prisma.photo.count({ where: { projectId, kind: { in: ["PROGRESS", "TASK", "PUNCH"] }, createdAt: { gte: dayStart } } });
       return { ok: true, data: { message: `Added to timeline. ${n} ${n === 1 ? "photo" : "photos"} today.` } };
     }
-    await requireSession();
+    await requireSession("field.write");
+    // Profit is a financial figure: a supervisor gets a plain confirmation instead.
+    if (!can(session.user.staffRole, "financials.view")) return { ok: true, data: { message: "Cost added." } };
     const project = await prisma.project.findUnique({ where: { id: projectId }, include: { costs: { select: { amount: true } }, payments: { select: { amount: true } }, changeOrders: { select: { amount: true, status: true } } } });
     if (!project) return { ok: false, error: "Project not found." };
     const totals = calculateTotals({ contractValue: project.contractValue, costs: project.costs, payments: project.payments, changeOrders: project.changeOrders, sstEnabled: project.sstEnabled, sstRate: project.sstRate });
@@ -1956,6 +1961,108 @@ export async function addSubNote(projectId: string, text: unknown, requestId?: s
     return { ok: true };
   } catch (error) {
     if (alreadyApplied(error, rid)) return { ok: true };
+    return failure(error);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// People who sign in to the office app
+// ---------------------------------------------------------------------------
+
+const newPassword = z.string().min(8, "Use at least 8 characters").max(100);
+const inviteSchema = z.object({
+  name: z.string().trim().min(1, "Enter their name").max(80),
+  email: z.string().trim().toLowerCase().email("Enter a valid email"),
+  role: z.string().refine(isStaffRole, "Choose a role"),
+  tempPassword: newPassword,
+});
+export type InviteUserInput = z.input<typeof inviteSchema>;
+
+/** Admin adds a person with a temporary password they must replace at first sign-in. */
+export async function inviteUser(input: unknown): Promise<ActionResult> {
+  try {
+    await requireSession("users.manage");
+    const parsed = inviteSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+    const v = parsed.data;
+    if (await prisma.user.findUnique({ where: { email: v.email } })) return { ok: false, error: "Someone already has that email." };
+    await prisma.user.create({
+      data: { email: v.email, name: v.name, role: v.role, passwordHash: await bcrypt.hash(v.tempPassword, 10), mustChangePassword: true, isActive: true },
+    });
+    revalidatePath("/settings/users");
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+async function staffTarget(id: string) {
+  const user = await prisma.user.findUnique({ where: { id } });
+  return user && !user.subcontractorId ? user : null;
+}
+
+/** Stops (or restores) a person's access. Their session ends on their very next request. */
+export async function setUserActive(id: string, active: boolean): Promise<ActionResult> {
+  try {
+    const session = await requireSession("users.manage");
+    const user = await staffTarget(id);
+    if (!user) return { ok: false, error: "User not found." };
+    if (user.id === session.user.id) return { ok: false, error: "You cannot deactivate yourself." };
+    if (!active && user.role === "ADMIN" && (await prisma.user.count({ where: { role: "ADMIN", isActive: true, subcontractorId: null, id: { not: id } } })) === 0) {
+      return { ok: false, error: "There must always be at least one active admin." };
+    }
+    await prisma.user.update({ where: { id }, data: { isActive: active } });
+    revalidatePath("/settings/users");
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+/** New temporary password; the person must choose their own when they next sign in. */
+export async function resetUserPassword(id: string, tempPassword: string): Promise<ActionResult> {
+  try {
+    const session = await requireSession("users.manage");
+    const pw = newPassword.safeParse(tempPassword);
+    if (!pw.success) return { ok: false, error: pw.error.issues[0].message };
+    const user = await staffTarget(id);
+    if (!user) return { ok: false, error: "User not found." };
+    if (user.id === session.user.id) return { ok: false, error: "Change your own password from Your profile." };
+    await prisma.user.update({ where: { id }, data: { passwordHash: await bcrypt.hash(pw.data, 10), mustChangePassword: true } });
+    revalidatePath("/settings/users");
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+export async function updateOwnName(name: string): Promise<ActionResult> {
+  try {
+    const session = await requireSession("staff.any", { allowMustChange: true });
+    const trimmed = name.trim();
+    if (!trimmed) return { ok: false, error: "Enter your name" };
+    if (trimmed.length > 80) return { ok: false, error: "That name is too long" };
+    await prisma.user.update({ where: { id: session.user.id! }, data: { name: trimmed } });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+/** Change your own password. Works even while a temporary password is still in force. */
+export async function changeOwnPassword(current: string, next: string): Promise<ActionResult> {
+  try {
+    const session = await requireSession("staff.any", { allowMustChange: true });
+    const pw = newPassword.safeParse(next);
+    if (!pw.success) return { ok: false, error: pw.error.issues[0].message };
+    const user = await prisma.user.findUnique({ where: { id: session.user.id! } });
+    if (!user || !(await bcrypt.compare(current, user.passwordHash))) return { ok: false, error: "Your current password is not right." };
+    if (current === next) return { ok: false, error: "Choose a different password from the old one." };
+    await prisma.user.update({ where: { id: user.id }, data: { passwordHash: await bcrypt.hash(pw.data, 10), mustChangePassword: false } });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
     return failure(error);
   }
 }

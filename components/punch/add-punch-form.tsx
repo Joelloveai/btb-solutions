@@ -116,7 +116,7 @@ function Form({ projectId, lookups, close }: { projectId: string; lookups: Looku
 
 export function AddPunchForm({ projectId, lookups }: { projectId: string; lookups: Lookups }) {
   return (
-    <ModalButton label="+ Add Punch Item" title="Add punch item">
+    <ModalButton requires="field.write" label="+ Add Punch Item" title="Add punch item">
       {(close) => <Form projectId={projectId} lookups={lookups} close={close} />}
     </ModalButton>
   );

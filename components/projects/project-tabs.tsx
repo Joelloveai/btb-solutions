@@ -39,6 +39,7 @@ import { MessagesPanel, type MessageRow } from "@/components/client-view/message
 import { DiaryPanel, type DiaryRow } from "@/components/diary/diary-panel";
 import type { MaterialCost } from "@/components/diary/diary-form";
 import { TimelinePanel } from "@/components/timeline/timeline-panel";
+import { useCan } from "@/components/permissions-provider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -114,6 +115,8 @@ const TABS = [
   { id: "client", label: "For Client" },
 ] as const;
 
+const FINANCIAL_TABS = ["payments", "changes", "boq", "client"] as const;
+
 const tone = { PENDING: "yellow", APPROVED: "green", REJECTED: "red" } as const;
 
 export function ProjectTabs({
@@ -158,13 +161,15 @@ export function ProjectTabs({
   messages: MessageRow[];
 }) {
   const t = useT();
+  const allowed = useCan();
+  const tabs = TABS.filter((item) => !(FINANCIAL_TABS as readonly string[]).includes(item.id) || allowed("financials.view"));
   const openPunch = punch.filter((p) => p.status !== "CLOSED").length;
   const beforeCoverMissing = BEFORE_COVER_ITEMS.filter((item) => !checklistCounts[item.key]).length;
 
   return (
     <Tabs defaultValue="timeline" className="w-full">
       <TabsList className="flex overflow-x-auto">
-        {TABS.map((item) => (
+        {tabs.map((item) => (
           <TabsTrigger key={item.id} value={item.id} className="shrink-0 flex-1 px-3">
             {item.label in t ? t[item.label as keyof typeof t] : item.label}
             {item.id === "punch" && openPunch > 0 ? (

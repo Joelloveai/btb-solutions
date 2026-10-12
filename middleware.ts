@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 import { withAuth } from "next-auth/middleware";
+import { can } from "@/lib/permissions";
 
 type Role = "staff" | "client" | "sub";
 
 // Match whole path segments: "/sub" is the subcontractor area, but "/subcons" is a staff page,
 // and "/client" is the portal while "/clients" is a staff page.
+/** Screens about money: someone without financial access never lands on them. */
+const FINANCIAL_PATH = /^\/(dashboard|quotes|receivables|subcons|clients)(\/|$)|^\/projects\/[^/]+\/claims(\/|$)/;
+
 const within = (path: string, area: string) => path === area || path.startsWith(`${area}/`);
 
 /**
@@ -32,6 +36,14 @@ export default withAuth(
       return role === "sub" ? NextResponse.next() : NextResponse.redirect(new URL("/login", req.url));
     }
     // Everything else is the staff app.
+    if (role === "staff" || role === null) {
+      const staffRole = token?.staffRole;
+      // Choosing your own password comes before anything else.
+      if (token?.mustChange && !within(path, "/settings/profile")) return NextResponse.redirect(new URL("/settings/profile", req.url));
+      // The roles a person holds are re-checked by every page and action; this just keeps them off screens that are not theirs.
+      if (staffRole && !can(staffRole, "financials.view") && FINANCIAL_PATH.test(path)) return NextResponse.redirect(new URL("/projects", req.url));
+      if (staffRole && !can(staffRole, "users.manage") && within(path, "/settings/users")) return NextResponse.redirect(new URL("/projects", req.url));
+    }
     if (role === "client") return NextResponse.redirect(new URL("/client/projects", req.url));
     if (role === "sub") return NextResponse.redirect(new URL("/sub/tasks", req.url));
     return NextResponse.next();

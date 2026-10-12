@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
-import { TIMELINE_FILTERS } from "@/lib/constants";
+import { TIMELINE_EVENT_TYPES, TIMELINE_FILTERS } from "@/lib/constants";
+import { FINANCIAL_EVENT_TYPES } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 
 export type TimelineItem = {
@@ -30,10 +31,12 @@ const parse = (text: string): Record<string, unknown> => {
 };
 
 /** Cursor is "<capturedAt ms>_<seq>": newest first, with seq breaking ties. */
-export async function fetchTimelinePage(projectId: string, filterId: string, cursor?: string | null) {
+export async function fetchTimelinePage(projectId: string, filterId: string, cursor?: string | null, showFinancial = true) {
   const filter = TIMELINE_FILTERS.find((f) => f.id === filterId) ?? TIMELINE_FILTERS[0];
   const where: Prisma.TimelineEventWhereInput = { projectId };
-  if (filter.types) where.eventType = { in: [...filter.types] };
+  // Without financial access, payments, claims and change orders are not part of the timeline they see.
+  const allowed = (filter.types ?? TIMELINE_EVENT_TYPES).filter((t) => showFinancial || !(FINANCIAL_EVENT_TYPES as readonly string[]).includes(t));
+  if (filter.types || !showFinancial) where.eventType = { in: [...allowed] };
   const match = cursor ? /^(\d+)_(\d+)$/.exec(cursor) : null;
   if (match) {
     const at = new Date(Number(match[1]));

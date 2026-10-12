@@ -1,4 +1,5 @@
 import { ClientsTable } from "@/components/clients/clients-table";
+import { requireFinancialsPage } from "@/lib/guards";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { claimBalance } from "@/lib/claims";
@@ -12,6 +13,7 @@ export const dynamic = "force-dynamic";
 const DAY = 24 * 60 * 60 * 1000;
 
 export default async function ClientsPage() {
+  await requireFinancialsPage();
   const { locale, t } = await getT();
   const money = (n: number) => formatRM(n, locale);
   const include = { costs: true, payments: true, changeOrders: true, claims: { include: { payments: true } } };

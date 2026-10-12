@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import type { ActionResult } from "@/app/actions";
+import { useCan } from "@/components/permissions-provider";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/components/locale-provider";
 import { Modal } from "@/components/ui/modal";
@@ -11,6 +12,8 @@ const iconButton =
   "flex h-12 w-12 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 export function EditIconButton({ label, onClick }: { label: string; onClick: () => void }) {
+  const allowed = useCan();
+  if (!allowed("money.write")) return null;
   return (
     <button type="button" aria-label={label} onClick={onClick} className={iconButton}>
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -34,6 +37,8 @@ export function DeleteIconButton({
   const close = useCallback(() => setOpen(false), []);
   const { pending, submit } = useSubmit("Deleted", close);
   const t = useT();
+  const allowed = useCan();
+  if (!allowed("money.write")) return null;
 
   return (
     <>

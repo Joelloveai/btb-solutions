@@ -1,4 +1,5 @@
 import { getServerSession } from "next-auth";
+import { can } from "@/lib/permissions";
 import { authOptions, roleOf } from "@/lib/auth";
 import { buildTimelinePack } from "@/lib/evidence-pack";
 
@@ -9,6 +10,7 @@ export const maxDuration = 120;
 export async function GET(_request: Request, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
   if (roleOf(session) !== "staff") return new Response("Not signed in", { status: 401 });
+  if (!can(session?.user?.staffRole, "financials.view")) return new Response("Not allowed", { status: 403 });
   const pack = await buildTimelinePack(params.id, session?.user?.name ?? session?.user?.email ?? "staff");
   if (!pack) return new Response("Not found", { status: 404 });
   const safeName = pack.project.name.replace(/[^A-Za-z0-9 _-]/g, "").trim().replace(/\s+/g, "-") || "project";

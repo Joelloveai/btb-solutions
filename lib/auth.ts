@@ -5,6 +5,7 @@ import { clearPinFailures, pinLocked, recordPinFailure } from "./pin-throttle";
 import { prisma } from "./prisma";
 import { whatsappNumber } from "./whatsapp";
 
+import { can, isStaffRole, type Capability } from "./permissions";
 import type { Role } from "./roles";
 
 export { homeFor } from "./roles";
@@ -29,12 +30,16 @@ export const authOptions: NextAuthOptions = {
         });
         if (!user) return null;
         const valid = await bcrypt.compare(credentials.password, user.passwordHash);
-        if (!valid) return null;
+        // A deactivated person is refused even with the right password.
+        if (!valid || !user.isActive) return null;
+        await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
         return {
           id: user.id,
           email: user.email,
           name: user.name,
           role: user.subcontractorId ? "sub" : "staff",
+          staffRole: user.subcontractorId ? undefined : isStaffRole(user.role) ? user.role : "VIEWER",
+          mustChangePassword: user.mustChangePassword,
         };
       },
     }),
@@ -53,13 +58,14 @@ export const authOptions: NextAuthOptions = {
         // A locked phone number is refused even with the right PIN, so guessing gains nothing.
         if (await pinLocked(phone)) throw new Error("LOCKED");
         const user = await prisma.user.findUnique({ where: { phone } });
-        const valid = !!user?.subcontractorId && (await bcrypt.compare(pin, user.passwordHash));
+        const valid = !!user?.subcontractorId && user.isActive && (await bcrypt.compare(pin, user.passwordHash));
         if (!valid || !user) {
           await recordPinFailure(phone);
           if (await pinLocked(phone)) throw new Error("LOCKED");
           return null;
         }
         await clearPinFailures(phone);
+        await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
         return { id: user.id, email: user.email, name: user.name, role: "sub" };
       },
     }),
@@ -84,18 +90,41 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger }) {
       if (user) {
         token.uid = user.id;
         token.role = user.role ?? "staff";
+        token.staffRole = user.staffRole;
+        token.mustChange = user.mustChangePassword ?? false;
+      }
+      // After choosing a new password the page asks for a refresh, so the "change your password" gate lifts at once.
+      if (trigger === "update" && token.uid && token.role === "staff") {
+        const fresh = await prisma.user.findUnique({ where: { id: token.uid }, select: { mustChangePassword: true, role: true } });
+        token.mustChange = fresh?.mustChangePassword ?? false;
+        token.staffRole = isStaffRole(fresh?.role) ? fresh.role : undefined;
       }
       return token;
     },
+    /**
+     * Runs every time the session is read, so a person who is deactivated (or deleted) mid-session is
+     * signed out on their very next request: the session simply has no user any more.
+     */
     async session({ session, token }) {
-      if (session.user) {
-        session.user.id = token.uid;
-        session.user.role = token.role;
+      if (!session.user || !token.uid) return session;
+      if (token.role === "client") {
+        const client = await prisma.clientUser.findUnique({ where: { id: token.uid }, select: { id: true } });
+        if (!client) return { expires: session.expires } as Session;
+      } else {
+        const user = await prisma.user.findUnique({ where: { id: token.uid }, select: { isActive: true, role: true, mustChangePassword: true, name: true, subcontractorId: true } });
+        if (!user || !user.isActive) return { expires: session.expires } as Session;
+        if (!user.subcontractorId) {
+          session.user.staffRole = isStaffRole(user.role) ? user.role : "VIEWER";
+          session.user.mustChangePassword = user.mustChangePassword;
+          session.user.name = user.name ?? session.user.name;
+        }
       }
+      session.user.id = token.uid;
+      session.user.role = token.role;
       return session;
     },
   },
@@ -109,10 +138,19 @@ export const roleOf = (session: Session | null): Role | null =>
  * Server actions are public endpoints, so each one must confirm the session itself.
  * This is the STAFF guard: clients and subcontractors hold valid sessions too, and must not pass it.
  */
-export async function requireSession() {
+export async function requireSession(capability: Capability = "money.write", options: { allowMustChange?: boolean } = {}) {
   const session = await getServerSession(authOptions);
   if (!session?.user || roleOf(session) !== "staff") throw new Error("Not signed in");
+  // A temporary password must be replaced before anything else can be done.
+  if (session.user.mustChangePassword && !options.allowMustChange) throw new Error("Change password first");
+  if (!can(session.user.staffRole, capability)) throw new Error("Not allowed");
   return session;
+}
+
+/** For reading pages: any office role that has the capability, or null (the page then redirects). */
+export async function staffCan(capability: Capability) {
+  const session = await getServerSession(authOptions);
+  return roleOf(session) === "staff" && can(session?.user?.staffRole, capability);
 }
 
 /** A signed-in client of the contractor. Checked against the database so revoking access takes effect at once. */

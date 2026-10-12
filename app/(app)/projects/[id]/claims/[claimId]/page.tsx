@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { requireFinancialsPage } from "@/lib/guards";
 import { Letterhead } from "@/components/layout/letterhead";
 import { PrintButton } from "@/components/print-button";
 import { claimBalance } from "@/lib/claims";
@@ -9,6 +10,7 @@ import { prisma } from "@/lib/prisma";
 export const dynamic = "force-dynamic";
 
 export default async function ClaimPrintPage({ params }: { params: { id: string; claimId: string } }) {
+  await requireFinancialsPage();
   const claim = await prisma.claim.findUnique({
     where: { id: params.claimId },
     include: { project: true, payments: true },

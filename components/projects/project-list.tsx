@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { staffCan } from "@/lib/auth";
 import { CreateProjectForm } from "@/components/forms/create-project-form";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Prisma } from "@prisma/client";
@@ -11,6 +13,24 @@ import { ProjectTable } from "./project-table";
 
 export async function ProjectList({ onlyActive, showKpis = false }: { onlyActive: boolean; showKpis?: boolean }) {
   const locale = await getLocale();
+  // Site supervisors get the list of jobs without any of the money.
+  if (!(await staffCan("financials.view"))) {
+    const names = await prisma.project.findMany({ where: onlyActive ? { status: "ACTIVE" } : undefined, select: { id: true, name: true, clientName: true, status: true }, orderBy: { updatedAt: "desc" } });
+    return names.length === 0 ? (
+      <EmptyState title="No projects yet" hint="Projects you can work on will appear here." />
+    ) : (
+      <ul className="grid gap-3 sm:grid-cols-2">
+        {names.map((p) => (
+          <li key={p.id}>
+            <Link href={`/projects/${p.id}`} className="block rounded-xl border bg-card p-4 shadow-sm hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              <h2 className="font-semibold leading-snug">{p.name}</h2>
+              {p.clientName ? <p className="text-sm text-muted-foreground">{p.clientName}</p> : null}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    );
+  }
   const projects = await prisma.project.findMany({
     where: onlyActive ? { status: "ACTIVE" } : undefined,
     include: { costs: true, payments: true, changeOrders: true, claims: true },

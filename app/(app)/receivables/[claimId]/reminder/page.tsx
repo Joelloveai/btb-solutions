@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { requireFinancialsPage } from "@/lib/guards";
 import { Letterhead } from "@/components/layout/letterhead";
 import { PrintButton } from "@/components/print-button";
 import { claimBalance } from "@/lib/claims";
@@ -11,6 +12,7 @@ import { daysOverdue } from "@/lib/receivables";
 export const dynamic = "force-dynamic";
 
 export default async function ReminderPage({ params }: { params: { claimId: string } }) {
+  await requireFinancialsPage();
   const claim = await prisma.claim.findUnique({
     where: { id: params.claimId },
     include: { project: true, payments: true },

@@ -8,17 +8,24 @@ datasource db {
 }
 
 model User {
-  id              String         @id @default(cuid())
-  email           String         @unique
-  passwordHash    String
-  name            String?
-  locale          String         @default("en")
+  id                 String         @id @default(cuid())
+  email              String         @unique
+  passwordHash       String
+  name               String?
+  locale             String         @default("en")
+  /// Office role: ADMIN, MANAGER, SUPERVISOR or VIEWER. Only meaningful when subcontractorId is empty.
+  /// Defaults to the least powerful so a login made without thinking about it can do nothing harmful.
+  role               String         @default("VIEWER")
+  isActive           Boolean        @default(true)
+  /// True after an admin sets a temporary password; cleared when the person chooses their own.
+  mustChangePassword Boolean        @default(false)
+  lastLoginAt        DateTime?
   /// Subcontractors sign in with phone + PIN. Digits only, international form (60123456789). Unique across users.
-  phone           String?        @unique
+  phone              String?        @unique
   /// Set for a subcontractor's task-log login; staff users leave it empty.
-  subcontractorId String?
-  subcontractor   Subcontractor? @relation(fields: [subcontractorId], references: [id], onDelete: SetNull)
-  createdAt       DateTime       @default(now())
+  subcontractorId    String?
+  subcontractor      Subcontractor? @relation(fields: [subcontractorId], references: [id], onDelete: SetNull)
+  createdAt          DateTime       @default(now())
 }
 
 model Project {

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requireFinancialsPage } from "@/lib/guards";
 import { notFound } from "next/navigation";
 import { ClaimsTable } from "@/components/claims/claims-table";
 import { IssueClaimButton } from "@/components/claims/issue-claim-form";
@@ -14,6 +15,7 @@ import { Prisma } from "@prisma/client";
 export const dynamic = "force-dynamic";
 
 export default async function ClaimsPage({ params }: { params: { id: string } }) {
+  await requireFinancialsPage();
   const project = await prisma.project.findUnique({
     where: { id: params.id },
     include: { claims: { orderBy: { number: "desc" }, include: { payments: true } }, changeOrders: true },

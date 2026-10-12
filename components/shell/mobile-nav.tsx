@@ -4,6 +4,7 @@ import { Ellipsis } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useT } from "@/components/locale-provider";
+import { useCan } from "@/components/permissions-provider";
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS, PRIMARY_MOBILE, isActive } from "./nav-items";
 import { useSidebar } from "./sidebar-context";
@@ -13,11 +14,13 @@ export function MobileNav() {
   const pathname = usePathname();
   const t = useT();
   const { setMobileOpen } = useSidebar();
-  const items = NAV_ITEMS.filter((item) => PRIMARY_MOBILE.includes(item.href));
+  const allowed = useCan();
+  const items = NAV_ITEMS.filter((item) => PRIMARY_MOBILE.includes(item.href) && (!item.requires || allowed(item.requires)));
   return (
     <nav
       aria-label="Mobile"
-      className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 gap-2 border-t bg-card px-2 pb-[env(safe-area-inset-bottom)] md:hidden print:hidden"
+      style={{ gridTemplateColumns: `repeat(${items.length + 1}, minmax(0, 1fr))` }}
+      className="fixed inset-x-0 bottom-0 z-40 grid gap-2 border-t bg-card px-2 pb-[env(safe-area-inset-bottom)] md:hidden print:hidden"
     >
       {items.map((item) => {
         const active = isActive(pathname, item.href);

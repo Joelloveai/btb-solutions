@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { requireFinancialsPage } from "@/lib/guards";
 import { Letterhead } from "@/components/layout/letterhead";
 import { PrintButton } from "@/components/print-button";
 import { QUOTE_TERMS, QUOTE_VALID_DAYS } from "@/lib/company-config";
@@ -13,6 +14,7 @@ export const dynamic = "force-dynamic";
 const printUnit = (unit: string) => unit.replace(/^m2$/i, "m²").replace(/^m3$/i, "m³");
 
 export default async function QuotePrintPage({ params }: { params: { id: string } }) {
+  await requireFinancialsPage();
   const quote = await prisma.quote.findUnique({ where: { id: params.id }, include: { lines: { orderBy: { position: "asc" } } } });
   if (!quote) notFound();
   const locale = await getLocale();

@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, LogOut, Settings } from "lucide-react";
+import { ChevronDown, LogOut, Settings, UserRound } from "lucide-react";
 import Link from "next/link";
 import { useT } from "@/components/locale-provider";
 import { useSafeSignOut } from "@/components/offline/use-safe-sign-out";
@@ -31,6 +31,12 @@ export function UserMenu({ email }: { email: string }) {
       <DropdownMenuContent align="end">
         <DropdownMenuLabel className="max-w-[16rem] truncate">{email}</DropdownMenuLabel>
         <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <Link href="/settings/profile">
+            <UserRound className="h-4 w-4" aria-hidden="true" />
+            Your profile
+          </Link>
+        </DropdownMenuItem>
         <DropdownMenuItem asChild>
           <Link href="/settings">
             <Settings className="h-4 w-4" aria-hidden="true" />

@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { getServerSession } from "next-auth";
+import { can } from "@/lib/permissions";
 import { authOptions, roleOf } from "@/lib/auth";
 import { parsePhotoMetadata } from "@/lib/photo-metadata";
 import { tradeTagFor } from "@/lib/trade-tag";
@@ -22,6 +23,7 @@ export async function POST(request: Request) {
   const session = await getServerSession(authOptions);
   const role = roleOf(session);
   if (role !== "staff" && role !== "sub") return json({ error: "Not signed in" }, 401);
+  if (role === "staff" && (session?.user?.mustChangePassword || !can(session?.user?.staffRole, "field.write"))) return json({ error: "You do not have permission to add photos." }, 403);
 
   let form: FormData;
   try {

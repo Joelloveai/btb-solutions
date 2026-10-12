@@ -20,6 +20,7 @@ import { getT } from "@/lib/locale";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { can } from "@/lib/permissions";
 import { evidenceQuality } from "@/lib/evidence-quality";
 import { fetchTimelinePage } from "@/lib/timeline-query";
 import { Prisma } from "@prisma/client";
@@ -52,7 +53,11 @@ export default async function ProjectPage({ params }: { params: { id: string } }
   if (!project) notFound();
   const timeline = await fetchTimelinePage(project.id, "all");
   const quality = evidenceQuality(project.photos, project.costs);
-  const viewerId = (await getServerSession(authOptions))?.user?.id ?? null;
+  const viewerSession = await getServerSession(authOptions);
+  const viewerId = viewerSession?.user?.id ?? null;
+  // A supervisor works on site and does not see what the job earns, is paid or owes.
+  const fin = can(viewerSession?.user?.staffRole, "financials.view");
+  const canEditProject = can(viewerSession?.user?.staffRole, "money.write");
   const diaries = await prisma.siteDiary.findMany({ where: { projectId: project.id }, orderBy: { date: "desc" } });
   const uploaderEmails = new Map(
     (await prisma.user.findMany({ where: { id: { in: project.documents.map((d) => d.uploadedById).filter((id): id is string => !!id) } }, select: { id: true, email: true } })).map((u) => [u.id, u.email]),
@@ -133,7 +138,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
     boqLines: project.boqLines.map((b, i) => ({ id: b.id, label: `${i + 1}. ${b.description}` })),
     subcons: subcons.map((s) => ({ id: s.id, name: s.name })),
     // All claims, not just unpaid ones, so editing a payment never silently unlinks it.
-    claims: project.claims.map((c) => ({ id: c.id, label: `Claim ${c.number} · ${formatRM(c.netClaim.toNumber(), locale)}` })),
+    claims: (fin ? project.claims : []).map((c) => ({ id: c.id, label: `Claim ${c.number} · ${formatRM(c.netClaim.toNumber(), locale)}` })),
   };
 
   return (
@@ -146,14 +151,16 @@ export default async function ProjectPage({ params }: { params: { id: string } }
         title={project.name}
         description={
           <>
-            {project.clientName ?? "No client set"} · Contract {money(contractWithSst)}
-            {project.sstEnabled ? " (incl. SST)" : ""}
-            {totals.approvedChangeOrders !== 0 ? ` (incl. ${money(totals.approvedChangeOrders)} approved changes)` : ""}
+            {project.clientName ?? "No client set"}
+            {fin ? ` · Contract ${money(contractWithSst)}` : ""}
+            {fin && project.sstEnabled ? " (incl. SST)" : ""}
+            {fin && totals.approvedChangeOrders !== 0 ? ` (incl. ${money(totals.approvedChangeOrders)} approved changes)` : ""}
           </>
         }
       >
         <Badge tone={statusTone[status] ?? "gray"}>{PROJECT_STATUS_LABELS[status] ?? project.status}</Badge>
         {hasLatestDrawings ? <Badge tone="yellow">Latest Drawings</Badge> : null}
+        {canEditProject ? (
         <EditProjectButton
           id={project.id}
           values={{
@@ -167,12 +174,17 @@ export default async function ProjectPage({ params }: { params: { id: string } }
             status: project.status as ProjectStatus,
           }}
         />
-        <Link href={`/projects/${project.id}/claims`} className={linkButton("accent", true)}>
-          Progress Claims
-        </Link>
-        <a href={`/api/projects/${project.id}/cipaa-pack`} className={linkButton("secondary", true)}>
-          Generate CIPAA Pack
-        </a>
+        ) : null}
+        {fin ? (
+          <>
+            <Link href={`/projects/${project.id}/claims`} className={linkButton("accent", true)}>
+              Progress Claims
+            </Link>
+            <a href={`/api/projects/${project.id}/cipaa-pack`} className={linkButton("secondary", true)}>
+              Generate CIPAA Pack
+            </a>
+          </>
+        ) : null}
       </PageHeader>
       {!project.clientId && project.clientName ? (
         <div className="-mt-3 mb-4 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
@@ -180,12 +192,13 @@ export default async function ProjectPage({ params }: { params: { id: string } }
           <LinkClientButton projectId={project.id} />
         </div>
       ) : null}
-      {project.sstEnabled ? (
+      {fin && project.sstEnabled ? (
         <p className="-mt-3 mb-4 text-sm text-muted-foreground" data-testid="sst-line">
           SST ({Number(project.sstRate)}%): {money(totals.sstAmount)}
         </p>
       ) : null}
 
+      {fin ? (
       <div className="mb-4 grid grid-cols-2 gap-2 sm:mb-6 sm:grid-cols-3 sm:gap-3">
         <KpiCard label="Total Costs" value={money(totals.totalCosts)} testId="total-costs" />
         <KpiCard label="Total Payments" value={money(totals.totalPayments)} testId="total-payments" />
@@ -204,8 +217,9 @@ export default async function ProjectPage({ params }: { params: { id: string } }
           </p>
         </div>
       </div>
+      ) : null}
 
-      {project.clientId ? (
+      {fin && project.clientId ? (
         <LoginAccess
           title="Client portal access"
           description="Lets this client see progress photos, floor plans and the timeline. They never see costs or claims."
@@ -216,7 +230,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
         />
       ) : null}
 
-      <RetentionCard projectId={project.id} status={project.status} summary={summary} money={money} />
+      {fin ? <RetentionCard projectId={project.id} status={project.status} summary={summary} money={money} /> : null}
 
       <OfflineSnapshot
         data={{
@@ -229,7 +243,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
             description: c.description,
             amountText: money(c.amount.toNumber()),
           })),
-          payments: project.payments.slice(0, 100).map((p) => ({ id: p.id, dateText: formatDate(p.date, locale), amountText: money(p.amount.toNumber()), reference: p.reference })),
+          payments: (fin ? project.payments : []).slice(0, 100).map((p) => ({ id: p.id, dateText: formatDate(p.date, locale), amountText: money(p.amount.toNumber()), reference: p.reference })),
           tasks: project.tasks.slice(0, 100).map((t) => ({
             id: t.id,
             description: t.description,
@@ -255,7 +269,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
       <ProjectTabs
         projectId={project.id}
         timeline={timeline}
-        messages={project.messages.map((m) => ({
+        messages={(fin ? project.messages : []).map((m) => ({
           id: m.id,
           fromClient: m.authorRole === "client",
           name: m.authorName,
@@ -303,9 +317,9 @@ export default async function ProjectPage({ params }: { params: { id: string } }
         }))}
         clientView={{
           projectId: project.id,
-          hasClient: !!project.clientId,
+          hasClient: fin && !!project.clientId,
           stage: project.stage ?? "",
-          milestones: schedule.map((m) => ({
+          milestones: (fin ? schedule : []).map((m) => ({
             id: m.id,
             label: m.label,
             percent: m.percent,
@@ -315,7 +329,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
             overdue: m.overdue,
             dueText: m.dueDate ? formatDate(m.dueDate, locale) : null,
           })),
-          selections: project.selections.map((x) => ({
+          selections: (fin ? project.selections : []).map((x) => ({
             id: x.id,
             category: x.category,
             name: x.name,
@@ -323,7 +337,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
             photoId: x.photoId,
             approvedText: x.approvedAt ? formatDateTime(x.approvedAt, locale) : null,
           })),
-          logs: project.dailyLogs.map((l) => ({ id: l.id, dateText: formatDate(l.date, locale), note: l.note })),
+          logs: (fin ? project.dailyLogs : []).map((l) => ({ id: l.id, dateText: formatDate(l.date, locale), note: l.note })),
         }}
         punch={project.punchItems.map((item) => ({
           id: item.id,
@@ -362,7 +376,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
             : null,
         }))}
         lookups={lookups}
-        boq={boqRows}
+        boq={fin ? boqRows : []}
         unallocatedActual={unallocatedActual}
         costs={project.costs.map((c) => ({
           id: c.id,
@@ -378,7 +392,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
           boqLabel: boqLabel(c.boqLineId),
           paidAt: c.paidAt ? c.paidAt.toISOString() : null,
         }))}
-        payments={project.payments.map((p) => ({
+        payments={(fin ? project.payments : []).map((p) => ({
           id: p.id,
           date: p.date.toISOString(),
           amount: p.amount.toNumber(),
@@ -386,7 +400,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
           claimId: p.claimId,
           claimNumber: project.claims.find((c) => c.id === p.claimId)?.number ?? null,
         }))}
-        changeOrders={project.changeOrders.map((c) => ({
+        changeOrders={(fin ? project.changeOrders : []).map((c) => ({
           id: c.id,
           date: c.date.toISOString(),
           description: c.description,

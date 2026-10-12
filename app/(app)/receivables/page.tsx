@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requireFinancialsPage } from "@/lib/guards";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { claimBalance } from "@/lib/claims";
@@ -16,6 +17,7 @@ import { PageHeader } from "@/components/ui/page-header";
 export const dynamic = "force-dynamic";
 
 export default async function ReceivablesPage() {
+  await requireFinancialsPage();
   const { locale, t } = await getT();
   const money = (n: number) => formatRM(n, locale);
   const today = todayInMalaysia();

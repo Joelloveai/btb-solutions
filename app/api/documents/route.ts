@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { getServerSession } from "next-auth";
+import { can } from "@/lib/permissions";
 import { authOptions, roleOf } from "@/lib/auth";
 import { DOCUMENT_TYPES, PHOTO_TRADES } from "@/lib/constants";
 import { MAX_DOCUMENT_BYTES, detectDocumentType, documentNameKey } from "@/lib/document-files";
@@ -20,6 +21,7 @@ const json = (body: unknown, status = 200) => Response.json(body, { status, head
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions);
   if (roleOf(session) !== "staff") return json({ error: "Not signed in" }, 401);
+  if (!can(session?.user?.staffRole, "money.write")) return json({ error: "You do not have permission to add documents." }, 403);
 
   let form: FormData;
   try {

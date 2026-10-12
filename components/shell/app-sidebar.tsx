@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useT } from "@/components/locale-provider";
+import { useCan } from "@/components/permissions-provider";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS, isActive } from "./nav-items";
@@ -21,9 +22,10 @@ function Brand({ compact }: { compact?: boolean }) {
 function NavList({ compact, onNavigate }: { compact?: boolean; onNavigate?: () => void }) {
   const pathname = usePathname();
   const t = useT();
+  const allowed = useCan();
   return (
     <nav aria-label="Main" className="flex flex-col gap-0.5">
-      {NAV_ITEMS.map((item) => {
+      {NAV_ITEMS.filter((item) => !item.requires || allowed(item.requires)).map((item) => {
         const active = isActive(pathname, item.href);
         const Icon = item.icon;
         return (

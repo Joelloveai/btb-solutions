@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requireFinancialsPage } from "@/lib/guards";
 import { notFound, redirect } from "next/navigation";
 import { QuoteForm } from "@/components/quotes/quote-form";
 import type { QuoteStatus } from "@/lib/constants";
@@ -8,6 +9,7 @@ import { quoteNumber } from "@/lib/quotes";
 export const dynamic = "force-dynamic";
 
 export default async function EditQuotePage({ params }: { params: { id: string } }) {
+  await requireFinancialsPage();
   const quote = await prisma.quote.findUnique({ where: { id: params.id }, include: { lines: { orderBy: { position: "asc" } } } });
   if (!quote) notFound();
   if (quote.projectId) redirect(`/quotes/${quote.id}`);
