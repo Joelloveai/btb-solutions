@@ -53,6 +53,8 @@ export default async function ProjectPage({ params }: { params: { id: string } }
       messages: { orderBy: { createdAt: "desc" } },
       milestones: { orderBy: { dueDate: "asc" } },
       boqSections: { orderBy: { order: "asc" } },
+      siteInstructions: { orderBy: { issuedAt: "desc" } },
+      rfis: { orderBy: { raisedAt: "desc" } },
       teamMembers: { include: { user: { select: { name: true, email: true } } }, orderBy: { assignedAt: "asc" } },
     },
   });
@@ -315,6 +317,31 @@ export default async function ProjectPage({ params }: { params: { id: string } }
       <ProjectTabs
         projectId={project.id}
         timeline={timeline}
+        siteRecords={{
+          instructions: project.siteInstructions.map((i) => ({
+            id: i.id,
+            number: i.instructionNumber,
+            issuedBy: i.issuedBy,
+            issuedTo: i.issuedTo,
+            description: i.description,
+            status: i.status,
+            issuedText: formatDateTime(i.issuedAt, locale),
+            acknowledgedText: i.acknowledgedAt ? formatDateTime(i.acknowledgedAt, locale) : null,
+            closedText: i.closedAt ? formatDateTime(i.closedAt, locale) : null,
+          })),
+          rfis: project.rfis.map((r) => ({
+            id: r.id,
+            number: r.rfiNumber,
+            subject: r.subject,
+            question: r.question,
+            raisedBy: r.raisedBy,
+            assignedTo: r.assignedTo,
+            response: r.response,
+            status: r.status,
+            raisedText: formatDateTime(r.raisedAt, locale),
+            respondedText: r.respondedAt ? formatDateTime(r.respondedAt, locale) : null,
+          })),
+        }}
         contract={{
           view: { facts },
           details: {

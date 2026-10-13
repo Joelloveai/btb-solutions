@@ -25,6 +25,8 @@ export type DiaryContent = {
   worksDone: string;
   issues: string | null;
   visitorLog: string | null;
+  safetyObservations?: string | null;
+  weatherNote?: string | null;
   preparedById: string;
   preparedAtIso: string;
 };
@@ -34,7 +36,7 @@ const sortedEntries = (o: Record<string, number>) => Object.entries(o).filter(([
 /** What both signatures are bound to: change anything in the diary and this changes. */
 export function diaryContentHash(c: DiaryContent) {
   return sha(
-    JSON.stringify([c.projectId, c.date, c.weather, sortedEntries(c.manpower), [...c.machinery].sort(), c.materialsIn, c.worksDone, c.issues, c.visitorLog, c.preparedById, c.preparedAtIso]),
+    JSON.stringify([c.projectId, c.date, c.weather, sortedEntries(c.manpower), [...c.machinery].sort(), c.materialsIn, c.worksDone, c.issues, c.visitorLog, ...(c.safetyObservations ? [c.safetyObservations] : []), c.preparedById, c.preparedAtIso]),
   );
 }
 
@@ -65,7 +67,7 @@ export async function buildDiaryPdf(d: DiaryForPdf): Promise<Uint8Array> {
   pdf.text("BUKU HARIAN TAPAK BINA / SITE DIARY", { size: 16, bold: true, gap: 6 });
   pdf.pair("Project", d.projectName);
   pdf.pair("Date", formatDate(new Date(`${d.date}T00:00:00.000Z`)));
-  pdf.pair("Weather", d.weather);
+  pdf.pair("Weather", d.weatherNote ? `${d.weather} (${d.weatherNote})` : d.weather);
 
   pdf.heading("Manpower on site", 12);
   const men = sortedEntries(d.manpower);
@@ -84,6 +86,8 @@ export async function buildDiaryPdf(d: DiaryForPdf): Promise<Uint8Array> {
   pdf.text(d.worksDone);
   pdf.heading("Issues / instructions", 12);
   pdf.text(d.issues || "None recorded.");
+  pdf.heading("Safety observations", 12);
+  pdf.text(d.safetyObservations || "None recorded.");
   pdf.heading("Visitors", 12);
   pdf.text(d.visitorLog || "None recorded.");
 

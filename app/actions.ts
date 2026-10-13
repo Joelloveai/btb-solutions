@@ -13,6 +13,7 @@ import { authOptions } from "@/lib/auth";
 import { can, isStaffRole } from "@/lib/permissions";
 import { calculateTotals } from "@/lib/calculations";
 import { boqClaimLine, claimNumberFor, computeClaim, projectCode } from "@/lib/claims";
+import { fetchSiteWeather } from "@/lib/weather";
 import { PROJECT_STAGES, TEAM_ROLES } from "@/lib/constants";
 import { isLocale } from "@/lib/i18n";
 import { prisma } from "@/lib/prisma";
@@ -1730,6 +1731,8 @@ export async function createSiteDiary(projectId: string, input: unknown, request
       worksDone: v.worksDone,
       issues: orNull(v.issues),
       visitorLog: orNull(v.visitorLog),
+      safetyObservations: orNull(v.safetyObservations),
+      weatherNote: orNull(v.weatherNote),
       preparedById: actor.id ?? "",
       preparedAtIso: preparedAt.toISOString(),
     };
@@ -1756,6 +1759,8 @@ export async function createSiteDiary(projectId: string, input: unknown, request
           worksDone: v.worksDone,
           issues: content.issues,
           visitorLog: content.visitorLog,
+          safetyObservations: content.safetyObservations,
+          weatherNote: content.weatherNote,
           preparedById: content.preparedById,
           preparedBy,
           preparedAt,
@@ -1816,6 +1821,8 @@ export async function countersignSiteDiary(id: string, signature: string): Promi
       worksDone: diary.worksDone,
       issues: diary.issues,
       visitorLog: diary.visitorLog,
+      safetyObservations: diary.safetyObservations,
+      weatherNote: diary.weatherNote,
       preparedById: diary.preparedById,
       preparedAtIso: diary.preparedAt.toISOString(),
       projectName: diary.project.name,
@@ -2419,6 +2426,160 @@ export async function setClaimDisputed(claimId: string, disputed: boolean): Prom
     return { ok: true };
   } catch (error) {
     if (error instanceof Error && error.message.startsWith("claim: ")) return { ok: false, error: error.message.slice(7) };
+    return failure(error);
+  }
+}
+
+/** Today's weather at the project's site (needs GPS on the project and OPENWEATHER_API_KEY). Null means "just ask the person". */
+export async function getSiteWeather(projectId: string): Promise<ActionResult<{ weather: string; note: string } | null>> {
+  try {
+    await requireSession("field.write");
+    const project = await prisma.project.findUnique({ where: { id: projectId }, select: { siteLatitude: true, siteLongitude: true } });
+    if (!project || project.siteLatitude === null || project.siteLongitude === null) return { ok: true, data: null };
+    return { ok: true, data: await fetchSiteWeather(project.siteLatitude, project.siteLongitude) };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Site instructions and RFIs (Priority 3)
+// ---------------------------------------------------------------------------
+
+const instructionSchema = z.object({
+  issuedTo: z.string().trim().min(1, "Who is it for?").max(120),
+  description: z.string().trim().min(1, "Write the instruction").max(2000),
+});
+const rfiSchema = z.object({
+  subject: z.string().trim().min(1, "Give it a short subject").max(120),
+  question: z.string().trim().min(1, "Write the question").max(2000),
+  assignedTo: z.string().trim().max(120).optional().or(z.literal("")),
+});
+
+const seqNumber = (prefix: string, n: number) => `${prefix}-${String(n).padStart(3, "0")}`;
+
+/** A written site instruction (SI-001...). Safe to retry from a phone with a poor signal. */
+export async function issueSiteInstruction(projectId: string, input: unknown, requestId?: string, capturedAtIso?: string): Promise<ActionResult> {
+  const rid = requestIdOf(requestId);
+  try {
+    const session = await requireSession("field.write");
+    const parsed = instructionSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+    const v = parsed.data;
+    const when = capturedAtIso ? new Date(capturedAtIso) : null;
+    const issuedAt = when && !Number.isNaN(when.getTime()) && when.getTime() <= Date.now() ? when : new Date();
+    await recorded(async (tx) => {
+      const number = seqNumber("SI", (await tx.siteInstruction.count({ where: { projectId } })) + 1);
+      const row = await tx.siteInstruction.create({
+        data: { projectId, instructionNumber: number, issuedBy: session.user.name ?? session.user.email ?? "Staff", issuedTo: v.issuedTo, description: v.description, issuedAt, clientRequestId: rid },
+      });
+      await appendEvent(tx, {
+        projectId,
+        type: "INSTRUCTION",
+        actor: actorFromSession(session),
+        title: `Site instruction ${number} issued to ${v.issuedTo}`,
+        description: v.description,
+        capturedAt: issuedAt,
+        metadata: { action: "issued", instructionId: row.id, number },
+      });
+    });
+    revalidatePath(`/projects/${projectId}`);
+    return { ok: true };
+  } catch (error) {
+    if (alreadyApplied(error, rid)) return { ok: true };
+    return failure(error);
+  }
+}
+
+export async function setInstructionStatus(id: string, status: "ACKNOWLEDGED" | "CLOSED"): Promise<ActionResult> {
+  try {
+    const session = await requireSession("field.write");
+    await recorded(async (tx) => {
+      const row = await tx.siteInstruction.findUniqueOrThrow({ where: { id } });
+      if (row.status === "CLOSED" || row.status === status) return;
+      const now = new Date();
+      await tx.siteInstruction.update({ where: { id }, data: status === "ACKNOWLEDGED" ? { status, acknowledgedAt: now } : { status, closedAt: now, acknowledgedAt: row.acknowledgedAt ?? now } });
+      await appendEvent(tx, {
+        projectId: row.projectId,
+        type: "INSTRUCTION",
+        actor: actorFromSession(session),
+        title: `Site instruction ${row.instructionNumber} ${status === "ACKNOWLEDGED" ? "acknowledged" : "closed"}`,
+        description: row.description,
+        metadata: { action: status.toLowerCase(), instructionId: id },
+      });
+    });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+/** Raise a request for information (RFI-001...). */
+export async function raiseRfi(projectId: string, input: unknown, requestId?: string, capturedAtIso?: string): Promise<ActionResult> {
+  const rid = requestIdOf(requestId);
+  try {
+    const session = await requireSession("field.write");
+    const parsed = rfiSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+    const v = parsed.data;
+    const when = capturedAtIso ? new Date(capturedAtIso) : null;
+    const raisedAt = when && !Number.isNaN(when.getTime()) && when.getTime() <= Date.now() ? when : new Date();
+    await recorded(async (tx) => {
+      const number = seqNumber("RFI", (await tx.rfi.count({ where: { projectId } })) + 1);
+      const row = await tx.rfi.create({
+        data: { projectId, rfiNumber: number, subject: v.subject, question: v.question, raisedBy: session.user.name ?? session.user.email ?? "Staff", assignedTo: orNull(v.assignedTo), raisedAt, clientRequestId: rid },
+      });
+      await appendEvent(tx, {
+        projectId,
+        type: "RFI",
+        actor: actorFromSession(session),
+        title: `${number} raised: ${v.subject}`,
+        description: v.question,
+        capturedAt: raisedAt,
+        metadata: { action: "raised", rfiId: row.id, number, assignedTo: orNull(v.assignedTo) },
+      });
+    });
+    revalidatePath(`/projects/${projectId}`);
+    return { ok: true };
+  } catch (error) {
+    if (alreadyApplied(error, rid)) return { ok: true };
+    return failure(error);
+  }
+}
+
+export async function answerRfi(id: string, response: string): Promise<ActionResult> {
+  try {
+    const session = await requireSession("field.write");
+    const text = response.trim();
+    if (!text) return { ok: false, error: "Write the answer first." };
+    if (text.length > 2000) return { ok: false, error: "That answer is too long (2,000 characters at most)." };
+    await recorded(async (tx) => {
+      const row = await tx.rfi.findUniqueOrThrow({ where: { id } });
+      if (row.status === "CLOSED") throw new Error("rfi: This RFI is closed.");
+      await tx.rfi.update({ where: { id }, data: { response: text, status: "ANSWERED", respondedAt: new Date() } });
+      await appendEvent(tx, { projectId: row.projectId, type: "RFI", actor: actorFromSession(session), title: `${row.rfiNumber} answered: ${row.subject}`, description: text, metadata: { action: "answered", rfiId: id } });
+    });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("rfi: ")) return { ok: false, error: error.message.slice(5) };
+    return failure(error);
+  }
+}
+
+export async function closeRfi(id: string): Promise<ActionResult> {
+  try {
+    const session = await requireSession("field.write");
+    await recorded(async (tx) => {
+      const row = await tx.rfi.findUniqueOrThrow({ where: { id } });
+      if (row.status === "CLOSED") return;
+      await tx.rfi.update({ where: { id }, data: { status: "CLOSED", closedAt: new Date() } });
+      await appendEvent(tx, { projectId: row.projectId, type: "RFI", actor: actorFromSession(session), title: `${row.rfiNumber} closed: ${row.subject}`, metadata: { action: "closed", rfiId: id } });
+    });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
     return failure(error);
   }
 }

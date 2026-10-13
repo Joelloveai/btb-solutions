@@ -57,7 +57,8 @@ describe("tradeTagFor", () => {
     expect(tradeTagFor("plumber")).toBe("Plumbing");
     expect(tradeTagFor("Air-con installer")).toBe("M&E");
     expect(tradeTagFor("Tiling & flooring")).toBe("Tiling");
-    expect(tradeTagFor("Landscaping")).toBe("Other");
+    expect(tradeTagFor("Landscaping")).toBe("Landscaping"); // a trade added in Priority 3
+    expect(tradeTagFor("Welding")).toBe("Other");
     expect(tradeTagFor(null)).toBe("Other");
   });
 });

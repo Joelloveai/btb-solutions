@@ -37,6 +37,7 @@ import { AddCostForm } from "@/components/forms/add-cost-form";
 import { AddPaymentForm } from "@/components/forms/add-payment-form";
 import { Badge } from "@/components/ui/badge";
 import { AddSectionButton, DeleteSectionButton, ProgressButton } from "@/components/boq/boq-extras";
+import { SiteRecordsPanel } from "@/components/site-records/site-records-panel";
 import { ContractPanel } from "@/components/contract/contract-panel";
 import { MessagesPanel, type MessageRow } from "@/components/client-view/messages-panel";
 import { DiaryPanel, type DiaryRow } from "@/components/diary/diary-panel";
@@ -128,6 +129,7 @@ const TABS = [
   { id: "punch", label: "Punch List" },
   { id: "documents", label: "Documents" },
   { id: "diary", label: "Site Diary" },
+  { id: "records", label: "Site Records" },
   { id: "client", label: "For Client" },
 ] as const;
 
@@ -173,6 +175,7 @@ export function ProjectTabs({
   messages,
   contract,
   boqSections,
+  siteRecords,
 }: {
   projectId: string;
   costs: CostRow[];
@@ -196,6 +199,7 @@ export function ProjectTabs({
   messages: MessageRow[];
   contract: Omit<ComponentProps<typeof ContractPanel>, "projectId">;
   boqSections: BoqSectionRow[];
+  siteRecords: Omit<ComponentProps<typeof SiteRecordsPanel>, "projectId">;
 }) {
   const t = useT();
   const allowed = useCan();
@@ -266,6 +270,9 @@ export function ProjectTabs({
       </TabsContent>
       <TabsContent value="diary">
         <DiaryPanel projectId={projectId} rows={diaries} materialCosts={materialCosts} />
+      </TabsContent>
+      <TabsContent value="records">
+        <SiteRecordsPanel projectId={projectId} {...siteRecords} />
       </TabsContent>
       <TabsContent value="client">
         <ClientViewPanel {...clientView} />

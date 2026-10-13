@@ -2,7 +2,8 @@
 
 import clsx from "clsx";
 import { Minus, Plus } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { getSiteWeather } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
 import { VoiceInput } from "@/components/ui/voice-input";
@@ -25,9 +26,29 @@ export function DiaryForm({ projectId, materialCosts, close }: { projectId: stri
   const [worksDone, setWorksDone] = useState("");
   const [issues, setIssues] = useState("");
   const [visitorLog, setVisitorLog] = useState("");
+  const [safety, setSafety] = useState("");
+  const [weatherNote, setWeatherNote] = useState("");
   const [error, setError] = useState("");
   const [signed, setSigned] = useState(false);
   const pad = useRef<SignaturePadHandle>(null);
+  const autoWeather = useRef("");
+
+  // Fill in the weather from the site's GPS when we can (needs signal and a weather key); otherwise the person taps it.
+  useEffect(() => {
+    let live = true;
+    getSiteWeather(projectId).then(
+      (r) => {
+        if (!live || !r.ok || !r.data) return;
+        autoWeather.current = r.data.weather;
+        setWeather((cur) => cur || r.data!.weather);
+        setWeatherNote(r.data.note);
+      },
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [projectId]);
   const { pending, submit } = useOfflineSubmit("Saved. Your diary is signed and waiting for a countersignature.", close);
   const delivered = materialCosts.filter((c) => c.dateKey === date);
   const total = Object.values(manpower).reduce((t, n) => t + n, 0);
@@ -48,12 +69,17 @@ export function DiaryForm({ projectId, materialCosts, close }: { projectId: stri
           type: "createDiary",
           projectId,
           label: `Site diary ${date}`,
-          payload: { input: { date, weather, manpower, machinery, worksDone, issues, visitorLog, signature } },
+          payload: { input: { date, weather, manpower, machinery, worksDone, issues, visitorLog, safetyObservations: safety, weatherNote: weatherNote && weather === autoWeather.current ? weatherNote : "", signature } },
         });
       }}
     >
       <fieldset>
         <legend className="mb-1.5 text-sm font-medium">Weather</legend>
+        {weatherNote && weather === autoWeather.current ? (
+          <p className="mb-2 text-sm text-muted-foreground" data-testid="weather-auto">
+            Filled in automatically: {weatherNote}. Tap another to change it.
+          </p>
+        ) : null}
         <div className="grid grid-cols-2 gap-2">
           {DIARY_WEATHER.map((w) => (
             <button
@@ -103,7 +129,7 @@ export function DiaryForm({ projectId, materialCosts, close }: { projectId: stri
       <details className="group rounded-md border border-input">
         <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between px-3 text-sm font-medium">
           <span>More</span>
-          <span className="text-muted-foreground group-open:hidden">date, machinery, deliveries, visitors</span>
+          <span className="text-muted-foreground group-open:hidden">date, machinery, safety, visitors</span>
         </summary>
         <div className="space-y-3 px-3 pb-3">
           <Field label="Date">
@@ -129,6 +155,9 @@ export function DiaryForm({ projectId, materialCosts, close }: { projectId: stri
               {delivered.length ? delivered.map((d) => d.description).join(", ") : "From the material costs you enter for this day. None yet."}
             </p>
           </div>
+          <Field label="Safety observations">
+            <VoiceInput multiline value={safety} onChange={(e) => setSafety(e.target.value)} maxLength={2000} placeholder="Toolbox talk, PPE, near misses, hazards" />
+          </Field>
           <Field label="Visitors">
             <VoiceInput multiline value={visitorLog} onChange={(e) => setVisitorLog(e.target.value)} maxLength={2000} placeholder="Who visited site, and why" />
           </Field>

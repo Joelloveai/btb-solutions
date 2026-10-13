@@ -85,6 +85,8 @@ model Project {
   messages                   ProjectMessage[]
   clientDigests              ClientDigest[]
   boqSections                BoqSection[]
+  siteInstructions           SiteInstruction[]
+  rfis                       Rfi[]
 }
 
 model CostEntry {
@@ -525,6 +527,10 @@ model SiteDiary {
   /// JSON array of { description, vendor } taken from that day's material costs
   materialsIn           String    @default("[]")
   worksDone             String
+  /// Safety observations of the day (toolbox talk, near misses, PPE...).
+  safetyObservations    String?
+  /// How the weather was filled in, e.g. "27°C, light rain (automatic)". Empty when it was tapped by hand.
+  weatherNote           String?
   issues                String?
   visitorLog            String?
   status                String    @default("AWAITING_COUNTERSIGN")
@@ -644,4 +650,44 @@ model ProjectTeamMember {
   assignedAt DateTime @default(now())
 
   @@unique([projectId, userId])
+}
+
+/// A written instruction on site (SI-001...). Open until the person it is for acknowledges it, closed when done.
+model SiteInstruction {
+  id                String    @id @default(cuid())
+  projectId         String
+  project           Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  instructionNumber String
+  issuedBy          String
+  issuedTo          String
+  description       String
+  attachmentKey     String?
+  status            String    @default("OPEN")
+  issuedAt          DateTime  @default(now())
+  acknowledgedAt    DateTime?
+  closedAt          DateTime?
+  clientRequestId   String?   @unique
+
+  @@unique([projectId, instructionNumber])
+}
+
+/// A request for information (RFI-001...): a question to the consultant or client, and the answer.
+model Rfi {
+  id              String    @id @default(cuid())
+  projectId       String
+  project         Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  rfiNumber       String
+  subject         String
+  question        String
+  raisedBy        String
+  assignedTo      String?
+  response        String?
+  status          String    @default("OPEN")
+  raisedAt        DateTime  @default(now())
+  respondedAt     DateTime?
+  closedAt        DateTime?
+  attachmentKey   String?
+  clientRequestId String?   @unique
+
+  @@unique([projectId, rfiNumber])
 }

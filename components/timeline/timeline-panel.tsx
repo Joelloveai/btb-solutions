@@ -38,6 +38,8 @@ const ICONS: Record<string, LucideIcon> = {
   APPROVAL: BadgeCheck,
   STAGE_CHANGED: Flag,
   NOTE: StickyNote,
+  INSTRUCTION: ClipboardList,
+  RFI: MessageSquare,
 };
 
 const KL = "Asia/Kuala_Lumpur";

@@ -69,6 +69,7 @@ export default async function DiaryReportPage({ params, searchParams }: { params
             <h3 className="font-bold">{formatDate(d.date, locale)} <span className="font-normal text-muted-foreground">· {d.weather} · {manpower} workers</span></h3>
             <p className="mt-1 whitespace-pre-wrap text-sm">{d.worksDone}</p>
             {d.issues ? <p className="mt-1 text-sm"><strong>Issues:</strong> {d.issues}</p> : null}
+            {d.safetyObservations ? <p className="mt-1 text-sm"><strong>Safety:</strong> {d.safetyObservations}</p> : null}
             {machinery.length ? <p className="mt-1 text-sm"><strong>Machinery:</strong> {machinery.join(", ")}</p> : null}
             {materials.length ? <p className="mt-1 text-sm"><strong>Delivered:</strong> {materials.map((m) => m.description).join(", ")}</p> : null}
             {d.visitorLog ? <p className="mt-1 text-sm"><strong>Visitors:</strong> {d.visitorLog}</p> : null}

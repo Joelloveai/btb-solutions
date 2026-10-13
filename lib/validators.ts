@@ -225,6 +225,8 @@ export const diarySchema = z.object({
   worksDone: z.string().trim().min(1, "Write what was done today").max(4000),
   issues: z.string().trim().max(4000).optional().or(z.literal("")),
   visitorLog: z.string().trim().max(2000).optional().or(z.literal("")),
+  safetyObservations: z.string().trim().max(2000).optional().or(z.literal("")),
+  weatherNote: z.string().trim().max(120).optional().or(z.literal("")),
   signature: z.string().max(400_000),
 });
 export type DiaryInput = z.infer<typeof diarySchema>;

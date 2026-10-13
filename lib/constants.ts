@@ -55,10 +55,12 @@ export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
 };
 
 /** Trade and phase tags for site photos, punch items and drawings. Stored as these exact strings. */
-export const PHOTO_TRADES = ["Structural", "M&E", "Plumbing", "Electrical", "Tiling", "Painting", "Carpentry", "Other"] as const;
+// The original eight first, then the trades added in Priority 3 (Architectural, HVAC, Waterproofing, Landscaping). "M&E" stays and stands for MEP.
+export const PHOTO_TRADES = ["Structural", "M&E", "Plumbing", "Electrical", "Tiling", "Painting", "Carpentry", "Architectural", "HVAC", "Waterproofing", "Landscaping", "Other"] as const;
 export type PhotoTrade = (typeof PHOTO_TRADES)[number];
 
-export const PHOTO_PHASES = ["Demo", "Framing", "Rough-in", "Pre-cover", "Finishing", "Punch List", "Final"] as const;
+// "Demo" is demolition and "Final" is the handover stage; Foundation and Handover were added in Priority 3.
+export const PHOTO_PHASES = ["Demo", "Foundation", "Framing", "Rough-in", "Pre-cover", "Finishing", "Punch List", "Handover", "Final"] as const;
 export type PhotoPhase = (typeof PHOTO_PHASES)[number];
 
 /**
@@ -109,6 +111,8 @@ export const TIMELINE_EVENT_TYPES = [
   "APPROVAL",
   "STAGE_CHANGED",
   "NOTE",
+  "INSTRUCTION",
+  "RFI",
 ] as const;
 export type TimelineEventType = (typeof TIMELINE_EVENT_TYPES)[number];
 
@@ -120,6 +124,7 @@ export const TIMELINE_FILTERS = [
   { id: "tasks", label: "Tasks", types: ["TASK_CREATED", "TASK_COMPLETED", "PUNCH_CREATED", "PUNCH_RESOLVED"] },
   { id: "documents", label: "Documents", types: ["DOCUMENT_UPLOADED"] },
   { id: "diary", label: "Diary", types: ["SITE_DIARY", "NOTE"] },
+  { id: "records", label: "Site records", types: ["INSTRUCTION", "RFI"] },
 ] as const;
 
 export const DIARY_WEATHER = ["Sunny", "Cloudy", "Rain", "Heavy rain"] as const;
