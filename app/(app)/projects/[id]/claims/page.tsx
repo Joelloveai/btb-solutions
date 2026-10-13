@@ -1,13 +1,15 @@
 import Link from "next/link";
 import { requireFinancialsPage } from "@/lib/guards";
 import { notFound } from "next/navigation";
+import { RetentionTracker } from "@/components/claims/retention-tracker";
+import { retentionReport } from "@/lib/retention";
 import { ClaimsTable } from "@/components/claims/claims-table";
 import { IssueClaimButton } from "@/components/claims/issue-claim-form";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { ChevronLeft } from "lucide-react";
-import { claimBalance } from "@/lib/claims";
-import { formatDate, formatRM } from "@/lib/format";
+import { boqClaimLine, claimBalance } from "@/lib/claims";
+import { formatDate, formatRM, todayInMalaysia } from "@/lib/format";
 import { getLocale } from "@/lib/locale";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
@@ -18,7 +20,7 @@ export default async function ClaimsPage({ params }: { params: { id: string } })
   await requireFinancialsPage();
   const project = await prisma.project.findUnique({
     where: { id: params.id },
-    include: { claims: { orderBy: { number: "desc" }, include: { payments: true } }, changeOrders: true },
+    include: { claims: { orderBy: { number: "desc" }, include: { payments: true } }, changeOrders: true, boqLines: true },
   });
   if (!project) notFound();
   const locale = await getLocale();
@@ -52,8 +54,21 @@ export default async function ClaimsPage({ params }: { params: { id: string } })
           sstRate={project.sstRate.toNumber()}
           previousClaimed={previousClaimed}
           claimableLeft={Math.max(0, claimableLeft)}
+          boqAmount={project.boqLines.reduce((t, l) => t + (boqClaimLine(l)?.currentAmount.toNumber() ?? 0), 0)}
         />
       </PageHeader>
+
+      <RetentionTracker
+        report={retentionReport({
+          claims: project.claims,
+          released: project.retentionReleased,
+          contractValue: project.contractValue,
+          releasePercent: project.retentionReleasePercent,
+          contractEndDate: project.contractEndDate,
+          defectsLiabilityDays: project.defectsLiabilityPeriodDays,
+          today: todayInMalaysia(),
+        })}
+      />
 
       {project.claims.length === 0 ? (
         <EmptyState title="No claims yet" hint="Issue your first progress claim when work is ready to be billed." />
@@ -65,6 +80,8 @@ export default async function ClaimsPage({ params }: { params: { id: string } })
               id: c.id,
               projectId: project.id,
               number: c.number,
+              claimNumber: c.claimNumber,
+              stored: c.status,
               dateText: formatDate(c.date, locale),
               dateSort: c.date.getTime(),
               workDone: money(c.workDone.toNumber()),

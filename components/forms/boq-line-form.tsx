@@ -5,7 +5,7 @@ import { useCallback, useState } from "react";
 import { useForm } from "react-hook-form";
 import { addBoqLine, updateBoqLine } from "@/app/actions";
 import { Button } from "@/components/ui/button";
-import { Field, Input } from "@/components/ui/field";
+import { Field, Input, Select } from "@/components/ui/field";
 import { VoiceInput } from "@/components/ui/voice-input";
 import { Modal, ModalButton } from "@/components/ui/modal";
 import { boqLineSchema, type BoqLineInput } from "@/lib/validators";
@@ -14,10 +14,12 @@ import { useSubmit } from "./use-submit";
 
 function Form({
   projectId,
+  sections,
   close,
   editing,
 }: {
   projectId: string;
+  sections: { id: string; name: string }[];
   close: () => void;
   editing?: { id: string; values: BoqLineInput };
 }) {
@@ -28,7 +30,7 @@ function Form({
     formState: { errors },
   } = useForm<BoqLineInput>({
     resolver: zodResolver(boqLineSchema),
-    defaultValues: editing?.values ?? { description: "", qty: "1", unit: "lot", rate: "" },
+    defaultValues: editing?.values ?? { description: "", qty: "1", unit: "lot", rate: "", sectionId: "", itemCode: "" },
   });
 
   return (
@@ -50,6 +52,27 @@ function Form({
           <Input {...register("rate")} type="number" step="0.01" inputMode="decimal" />
         </Field>
       </div>
+      <details className="group rounded-md border border-input">
+        <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between px-3 text-sm font-medium">
+          <span>More</span>
+          <span className="text-muted-foreground group-open:hidden">section, item number</span>
+        </summary>
+        <div className="space-y-3 px-3 pb-3">
+          <Field label="Section">
+            <Select {...register("sectionId")}>
+              <option value="">No section</option>
+              {sections.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Item number" error={errors.itemCode?.message}>
+            <Input {...register("itemCode")} placeholder="e.g. A.1.3" />
+          </Field>
+        </div>
+      </details>
       <Button type="submit" className="w-full" disabled={pending}>
         {pending ? "Saving…" : "Save BOQ line"}
       </Button>
@@ -57,22 +80,22 @@ function Form({
   );
 }
 
-export function AddBoqLineForm({ projectId }: { projectId: string }) {
+export function AddBoqLineForm({ projectId, sections = [] }: { projectId: string; sections?: { id: string; name: string }[] }) {
   return (
     <ModalButton label="+ Add BOQ Line" title="Add BOQ line">
-      {(close) => <Form projectId={projectId} close={close} />}
+      {(close) => <Form projectId={projectId} sections={sections} close={close} />}
     </ModalButton>
   );
 }
 
-export function EditBoqLineButton({ projectId, id, values }: { projectId: string; id: string; values: BoqLineInput }) {
+export function EditBoqLineButton({ projectId, id, values, sections = [] }: { projectId: string; id: string; values: BoqLineInput; sections?: { id: string; name: string }[] }) {
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
   return (
     <>
       <EditIconButton label="Edit BOQ line" onClick={() => setOpen(true)} />
       <Modal open={open} onClose={close} title="Edit BOQ line">
-        <Form projectId={projectId} close={close} editing={{ id, values }} />
+        <Form projectId={projectId} sections={sections} close={close} editing={{ id, values }} />
       </Modal>
     </>
   );

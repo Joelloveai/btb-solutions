@@ -21,6 +21,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { can } from "@/lib/permissions";
+import { retentionReport } from "@/lib/retention";
 import { displayStatus, weightedProgress } from "@/lib/milestones";
 import type { ContractDetailsInput } from "@/lib/validators";
 import { evidenceQuality } from "@/lib/evidence-quality";
@@ -51,6 +52,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
       paymentMilestones: { orderBy: { position: "asc" } },
       messages: { orderBy: { createdAt: "desc" } },
       milestones: { orderBy: { dueDate: "asc" } },
+      boqSections: { orderBy: { order: "asc" } },
       teamMembers: { include: { user: { select: { name: true, email: true } } }, orderBy: { assignedAt: "asc" } },
     },
   });
@@ -75,6 +77,15 @@ export default async function ProjectPage({ params }: { params: { id: string } }
   const money = (value: number) => formatRM(value, locale);
   const staffPeople = await prisma.user.findMany({ where: { subcontractorId: null, isActive: true }, select: { id: true, name: true, email: true }, orderBy: { name: "asc" } });
   const todayKl = todayInMalaysia();
+  const retentionAlert = retentionReport({
+    claims: project.claims,
+    released: project.retentionReleased,
+    contractValue: project.contractValue,
+    releasePercent: project.retentionReleasePercent,
+    contractEndDate: project.contractEndDate,
+    defectsLiabilityDays: project.defectsLiabilityPeriodDays,
+    today: todayKl,
+  }).alert;
   const dateText = (d: Date | null) => (d ? formatDate(d, locale) : null);
   const facts: [string, string][] = [
     ["Project type", project.projectType ? PROJECT_TYPE_LABELS[project.projectType as keyof typeof PROJECT_TYPE_LABELS] ?? project.projectType : ""],
@@ -155,8 +166,14 @@ export default async function ProjectPage({ params }: { params: { id: string } }
       budget: budget.toNumber(),
       actual: actual.toNumber(),
       remaining: budget.minus(actual).toNumber(),
+      sectionId: b.sectionId,
+      itemCode: b.itemCode,
+      completed: b.completedQuantity.toString(),
+      claimed: b.claimedQuantity.toString(),
+      percentDone: b.qty.isZero() ? 0 : Math.round(b.completedQuantity.dividedBy(b.qty).times(100).toNumber()),
     };
   });
+  const boqSections = project.boqSections.map((s) => ({ id: s.id, name: s.name, total: s.totalAmount.toNumber() }));
   const unallocatedActual = project.costs.filter((c) => !c.boqLineId).reduce((t, c) => t.plus(c.amount), new Prisma.Decimal(0)).toNumber();
   const lookups = {
     boqLines: project.boqLines.map((b, i) => ({ id: b.id, label: `${i + 1}. ${b.description}` })),
@@ -254,6 +271,11 @@ export default async function ProjectPage({ params }: { params: { id: string } }
         />
       ) : null}
 
+      {fin && retentionAlert ? (
+        <p role="status" className="mb-3 rounded-lg bg-pending-light px-3 py-2 text-sm font-medium text-pending-dark" data-testid="retention-alert">
+          {retentionAlert} <Link href={`/projects/${project.id}/claims`} className="underline">See the retention tracker</Link>
+        </p>
+      ) : null}
       {fin ? <RetentionCard projectId={project.id} status={project.status} summary={summary} money={money} /> : null}
 
       <OfflineSnapshot
@@ -435,6 +457,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
         }))}
         lookups={lookups}
         boq={fin ? boqRows : []}
+        boqSections={fin ? boqSections : []}
         unallocatedActual={unallocatedActual}
         costs={project.costs.map((c) => ({
           id: c.id,
@@ -469,6 +492,11 @@ export default async function ProjectPage({ params }: { params: { id: string } }
           sentText: c.sentToClientAt ? formatDateTime(c.sentToClientAt, locale) : null,
           clientDecisionText: c.clientDecision && c.clientDecidedAt ? `${c.clientDecision === "APPROVED" ? "Approved" : "Rejected"} by client ${formatDateTime(c.clientDecidedAt, locale)}` : null,
           canSend: !!project.clientId && c.status === "PENDING" && !c.sentToClientAt,
+          voNumber: c.voNumber ?? `VO-${String([...project.changeOrders].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()).findIndex((x) => x.id === c.id) + 1).padStart(3, "0")}`,
+          voType: c.voType,
+          timeExtensionDays: c.timeExtensionDays,
+          submittedBy: c.submittedBy,
+          approvedBy: c.approvedBy,
         }))}
       />
     </>

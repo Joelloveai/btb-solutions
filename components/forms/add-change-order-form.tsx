@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { addChangeOrder, updateChangeOrder } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import type { Lookups } from "@/components/projects/lookups";
@@ -28,13 +28,15 @@ function Form({
   const { pending, submit } = useSubmit(editing ? "Change order updated" : "Change order added", close);
   const {
     register,
+    control,
     handleSubmit,
     formState: { errors },
   } = useForm<ChangeOrderInput>({
     resolver: zodResolver(changeOrderSchema),
-    defaultValues: editing?.values ?? { date: todayInputValue(), description: "", amount: "", boqLineId: "" },
+    defaultValues: editing?.values ?? { date: todayInputValue(), description: "", amount: "", boqLineId: "", voType: "ADDITION", timeExtensionDays: "", submittedBy: "" },
   });
 
+  const voType = useWatch({ control, name: "voType" });
   return (
     <form onSubmit={handleSubmit((values) => submit(() => (editing ? updateChangeOrder(editing.id, values) : addChangeOrder(projectId, values))))} className="space-y-3">
       <Field label="Date" error={errors.date?.message}>
@@ -58,6 +60,29 @@ function Form({
           </Select>
         </Field>
       ) : null}
+      <details className="group rounded-md border border-input">
+        <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between px-3 text-sm font-medium">
+          <span>More</span>
+          <span className="text-muted-foreground group-open:hidden">type, days, who asked</span>
+        </summary>
+        <div className="space-y-3 px-3 pb-3">
+          <Field label="Type of variation">
+            <Select {...register("voType")}>
+              <option value="ADDITION">Addition</option>
+              <option value="OMISSION">Omission</option>
+              <option value="TIME_EXTENSION">Time extension (no money)</option>
+            </Select>
+          </Field>
+          {voType === "TIME_EXTENSION" ? (
+            <Field label="Days added to the contract" error={errors.timeExtensionDays?.message}>
+              <Input {...register("timeExtensionDays")} inputMode="numeric" />
+            </Field>
+          ) : null}
+          <Field label="Requested by">
+            <Input {...register("submittedBy")} placeholder="e.g. the client's name" />
+          </Field>
+        </div>
+      </details>
       <p className="text-sm text-muted-foreground">Status starts as Pending. Approve it from the list.</p>
       <Button type="submit" className="w-full" disabled={pending}>
         {pending ? "Saving…" : "Save change order"}

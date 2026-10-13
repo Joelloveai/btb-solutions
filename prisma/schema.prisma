@@ -84,6 +84,7 @@ model Project {
   evidencePacks              EvidencePack[]
   messages                   ProjectMessage[]
   clientDigests              ClientDigest[]
+  boqSections                BoqSection[]
 }
 
 model CostEntry {
@@ -122,57 +123,130 @@ model Payment {
 }
 
 model ChangeOrder {
-  id                String    @id @default(cuid())
-  projectId         String
-  project           Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  date              DateTime
-  description       String
-  amount            Decimal
-  status            String    @default("PENDING")
-  approvedAt        DateTime?
-  boqLineId         String?
-  boqLine           BoqLine?  @relation(fields: [boqLineId], references: [id], onDelete: SetNull)
-  createdAt         DateTime  @default(now())
+  id                  String    @id @default(cuid())
+  projectId           String
+  project             Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  date                DateTime
+  description         String
+  amount              Decimal
+  status              String    @default("PENDING")
+  approvedAt          DateTime?
+  boqLineId           String?
+  boqLine             BoqLine?  @relation(fields: [boqLineId], references: [id], onDelete: SetNull)
+  createdAt           DateTime  @default(now())
   /// When staff sent this change order to the client's portal for approval. Clients see only sent ones.
-  sentToClientAt    DateTime?
+  sentToClientAt      DateTime?
   /// "APPROVED" or "REJECTED", as decided by the client in the portal. The time is the SERVER clock.
-  clientDecision    String?
-  clientDecidedAt   DateTime?
-  clientDecidedById String?
+  clientDecision      String?
+  clientDecidedAt     DateTime?
+  clientDecidedById   String?
+  /// Variation order register (Priority 2). voNumber is VO-001, VO-002... within the project.
+  voNumber            String?
+  /// ADDITION, OMISSION or TIME_EXTENSION
+  voType              String    @default("ADDITION")
+  submittedBy         String?
+  approvedBy          String?
+  timeExtensionDays   Int?
+  /// Effect on the contract sum: the amount for an addition or omission (omissions are negative), 0 for a time extension.
+  impactOnContractSum Decimal?
 }
 
 /// One line of a project's bill of quantities: Qty x Rate = Amount.
 model BoqLine {
-  id           String        @id @default(cuid())
-  projectId    String
-  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  position     Int
-  description  String
-  qty          Decimal
-  unit         String
-  rate         Decimal
-  amount       Decimal
-  costs        CostEntry[]
-  changeOrders ChangeOrder[]
-  createdAt    DateTime      @default(now())
+  id                String          @id @default(cuid())
+  projectId         String
+  project           Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  position          Int
+  description       String
+  qty               Decimal
+  unit              String
+  rate              Decimal
+  amount            Decimal
+  costs             CostEntry[]
+  changeOrders      ChangeOrder[]
+  createdAt         DateTime        @default(now())
+  sectionId         String?
+  section           BoqSection?     @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  /// e.g. "A.1.3": the item number in the contract's bill of quantities.
+  itemCode          String?
+  /// How much of `qty` is physically done, and how much of that has already been put into a claim.
+  completedQuantity Decimal         @default(0)
+  claimedQuantity   Decimal         @default(0)
+  /// qty - completedQuantity, kept up to date whenever progress changes.
+  remainingQuantity Decimal         @default(0)
+  claimLines        ClaimLineItem[]
+}
+
+/// A heading in the bill of quantities ("Preliminaries", "Substructure"...). totalAmount is the sum of its lines.
+model BoqSection {
+  id          String    @id @default(cuid())
+  projectId   String
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name        String
+  order       Int       @default(0)
+  totalAmount Decimal   @default(0)
+  lines       BoqLine[]
+}
+
+/// One line of a claim: what was done on a BOQ item this period. Amounts are snapshots.
+model ClaimLineItem {
+  id             String   @id @default(cuid())
+  claimId        String
+  claim          Claim    @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  boqLineId      String?
+  boqLine        BoqLine? @relation(fields: [boqLineId], references: [id], onDelete: SetNull)
+  description    String
+  unit           String
+  quantity       Decimal
+  rate           Decimal
+  amount         Decimal
+  previousAmount Decimal
+  currentAmount  Decimal
+}
+
+/// The certificate that the amount claimed was checked and certified (by the QS / architect / client's rep).
+model ClaimCertificate {
+  id                String   @id @default(cuid())
+  claimId           String
+  claim             Claim    @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  certificateNumber String
+  certifiedAmount   Decimal
+  certifiedBy       String
+  certifiedAt       DateTime @default(now())
+  remarks           String?
+  pdfKey            String?
 }
 
 /// A formal progress claim. Money fields are snapshots taken when the claim is issued.
 model Claim {
-  id               String    @id @default(cuid())
-  projectId        String
-  project          Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  number           Int
-  date             DateTime
-  workDone         Decimal
-  sstAmount        Decimal
-  amountClaimed    Decimal
-  retentionPercent Decimal
-  retentionAmount  Decimal
-  previousClaimed  Decimal
-  netClaim         Decimal
-  payments         Payment[]
-  createdAt        DateTime  @default(now())
+  id                    String             @id @default(cuid())
+  projectId             String
+  project               Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  number                Int
+  date                  DateTime
+  workDone              Decimal
+  sstAmount             Decimal
+  amountClaimed         Decimal
+  retentionPercent      Decimal
+  retentionAmount       Decimal
+  previousClaimed       Decimal
+  netClaim              Decimal
+  payments              Payment[]
+  createdAt             DateTime           @default(now())
+  /// Priority 2. The "progress claim" of the CIPAA spec is this model: workDone = work done amount,
+  /// amountClaimed = total claimed, previousClaimed = previous claims, netClaim = net claim amount.
+  claimNumber           String?
+  periodFrom            DateTime?
+  periodTo              DateTime?
+  materialsOnSiteAmount Decimal            @default(0)
+  /// DRAFT, SUBMITTED, CERTIFIED, PAID or DISPUTED. Display status is also worked out from payments received.
+  status                String             @default("SUBMITTED")
+  submittedAt           DateTime?
+  certifiedAt           DateTime?
+  paidAt                DateTime?
+  certifiedBy           String?
+  lineItems             ClaimLineItem[]
+  certificates          ClaimCertificate[]
 
   @@unique([projectId, number])
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { Fragment } from "react";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { toast } from "sonner";
@@ -35,6 +36,7 @@ import { AddChangeOrderForm } from "@/components/forms/add-change-order-form";
 import { AddCostForm } from "@/components/forms/add-cost-form";
 import { AddPaymentForm } from "@/components/forms/add-payment-form";
 import { Badge } from "@/components/ui/badge";
+import { AddSectionButton, DeleteSectionButton, ProgressButton } from "@/components/boq/boq-extras";
 import { ContractPanel } from "@/components/contract/contract-panel";
 import { MessagesPanel, type MessageRow } from "@/components/client-view/messages-panel";
 import { DiaryPanel, type DiaryRow } from "@/components/diary/diary-panel";
@@ -88,6 +90,12 @@ export type ChangeOrderRow = {
   sentText: string | null;
   clientDecisionText: string | null;
   canSend: boolean;
+  /** Variation order register */
+  voNumber: string;
+  voType: string;
+  timeExtensionDays: number | null;
+  submittedBy: string | null;
+  approvedBy: string | null;
 };
 export type BoqRow = {
   id: string;
@@ -100,7 +108,13 @@ export type BoqRow = {
   budget: number;
   actual: number;
   remaining: number;
+  sectionId: string | null;
+  itemCode: string | null;
+  completed: string;
+  claimed: string;
+  percentDone: number;
 };
+export type BoqSectionRow = { id: string; name: string; total: number };
 
 const TABS = [
   { id: "timeline", label: "Timeline" },
@@ -118,6 +132,23 @@ const TABS = [
 ] as const;
 
 const FINANCIAL_TABS = ["payments", "changes", "boq", "client"] as const;
+
+const VO_TYPE_LABELS: Record<string, string> = { ADDITION: "Addition", OMISSION: "Omission", TIME_EXTENSION: "Time extension" };
+
+/** The register's totals. Only approved variations count toward the contract. */
+export function voRegister(rows: ChangeOrderRow[]) {
+  const approved = rows.filter((r) => r.status === "APPROVED");
+  const cents = (n: number) => Math.round(n * 100);
+  const additions = approved.filter((r) => r.voType !== "TIME_EXTENSION" && r.amount > 0).reduce((t, r) => t + cents(r.amount), 0);
+  const omissions = approved.filter((r) => r.voType !== "TIME_EXTENSION" && r.amount < 0).reduce((t, r) => t + cents(r.amount), 0);
+  return {
+    count: rows.length,
+    additions: additions / 100,
+    omissions: omissions / 100,
+    net: (additions + omissions) / 100,
+    days: approved.reduce((t, r) => t + (r.timeExtensionDays ?? 0), 0),
+  };
+}
 
 const tone = { PENDING: "yellow", APPROVED: "green", REJECTED: "red" } as const;
 
@@ -141,6 +172,7 @@ export function ProjectTabs({
   materialCosts,
   messages,
   contract,
+  boqSections,
 }: {
   projectId: string;
   costs: CostRow[];
@@ -163,6 +195,7 @@ export function ProjectTabs({
   materialCosts: MaterialCost[];
   messages: MessageRow[];
   contract: Omit<ComponentProps<typeof ContractPanel>, "projectId">;
+  boqSections: BoqSectionRow[];
 }) {
   const t = useT();
   const allowed = useCan();
@@ -207,7 +240,7 @@ export function ProjectTabs({
         <ChangeOrdersPanel projectId={projectId} rows={changeOrders} lookups={lookups} />
       </TabsContent>
       <TabsContent value="boq">
-        <BoqPanel projectId={projectId} rows={boq} unallocatedActual={unallocatedActual} />
+        <BoqPanel projectId={projectId} rows={boq} sections={boqSections} unallocatedActual={unallocatedActual} />
       </TabsContent>
       <TabsContent value="photos">
         <div className="space-y-6">
@@ -447,8 +480,25 @@ function ChangeOrdersPanel({ projectId, rows, lookups }: { projectId: string; ro
     });
   };
 
+  const register = voRegister(rows);
   return (
     <>
+      <dl className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-5" data-testid="vo-register">
+        {[
+          ["Variations", String(register.count), "vo-count"],
+          ["Additions approved", formatRM(register.additions), "vo-additions"],
+          ["Omissions approved", formatRM(register.omissions), "vo-omissions"],
+          ["Net change to contract", formatRM(register.net), "vo-net"],
+          ["Time extensions approved", `${register.days} days`, "vo-days"],
+        ].map(([label, value, id]) => (
+          <div key={id} className="rounded-xl border bg-card p-3">
+            <dt className="text-xs text-muted-foreground">{label}</dt>
+            <dd className="font-mono text-base font-semibold tabular-nums" data-testid={id}>
+              {value}
+            </dd>
+          </div>
+        ))}
+      </dl>
       <div className="mb-3 flex justify-end">
         <AddChangeOrderForm projectId={projectId} lookups={lookups} />
       </div>
@@ -476,7 +526,14 @@ function ChangeOrdersPanel({ projectId, rows, lookups }: { projectId: string; ro
                 <tr key={row.id} className={rowCls}>
                   <td className={mSub}>{formatDate(row.date)}</td>
                   <td className={mMain}>
+                    <span className="mr-2 text-xs font-semibold text-muted-foreground" data-testid="vo-number">{row.voNumber}</span>
                     {row.description}
+                    <span className="block text-xs text-muted-foreground">
+                      {VO_TYPE_LABELS[row.voType] ?? row.voType}
+                      {row.timeExtensionDays ? `: ${row.timeExtensionDays} days` : ""}
+                      {row.submittedBy ? ` · asked by ${row.submittedBy}` : ""}
+                      {row.approvedBy && row.status === "APPROVED" ? ` · approved by ${row.approvedBy}` : ""}
+                    </span>
                     {row.boqLabel ? <span className="block text-xs text-muted-foreground">BOQ: {row.boqLabel}</span> : null}
                   </td>
                   <td className={mAmount}>{formatRM(row.amount)}</td>
@@ -510,6 +567,9 @@ function ChangeOrdersPanel({ projectId, rows, lookups }: { projectId: string; ro
                           description: row.description,
                           amount: String(row.amount),
                           boqLineId: row.boqLineId ?? "",
+                          voType: (row.voType as "ADDITION" | "OMISSION" | "TIME_EXTENSION") ?? "ADDITION",
+                          timeExtensionDays: row.timeExtensionDays ? String(row.timeExtensionDays) : "",
+                          submittedBy: row.submittedBy ?? "",
                         }}
                       />
                       <DeleteIconButton
@@ -529,18 +589,24 @@ function ChangeOrdersPanel({ projectId, rows, lookups }: { projectId: string; ro
   );
 }
 
-function BoqPanel({ projectId, rows, unallocatedActual }: { projectId: string; rows: BoqRow[]; unallocatedActual: number }) {
+function BoqPanel({ projectId, rows, sections, unallocatedActual }: { projectId: string; rows: BoqRow[]; sections: BoqSectionRow[]; unallocatedActual: number }) {
   const { formatRM } = useFormatters();
+  // Items under their section heading, in section order; items with no section come last.
+  const groups = [
+    ...sections.map((section) => ({ section, rows: rows.filter((r) => r.sectionId === section.id) })),
+    { section: null, rows: rows.filter((r) => !r.sectionId || !sections.some((x) => x.id === r.sectionId)) },
+  ].filter((g) => g.section || g.rows.length > 0);
   return (
     <>
-      <div className="mb-3 flex justify-end">
-        <AddBoqLineForm projectId={projectId} />
+      <div className="mb-3 flex flex-wrap justify-end gap-2">
+        <AddSectionButton projectId={projectId} />
+        <AddBoqLineForm projectId={projectId} sections={sections} />
       </div>
-      {rows.length === 0 ? (
+      {rows.length === 0 && sections.length === 0 ? (
         <EmptyState
           title="No BOQ yet"
           hint="Add the work items for this job, or convert an accepted quote to get one automatically."
-          action={<AddBoqLineForm projectId={projectId} />}
+          action={<AddBoqLineForm projectId={projectId} sections={sections} />}
         />
       ) : (
         <TableShell>
@@ -555,9 +621,33 @@ function BoqPanel({ projectId, rows, unallocatedActual }: { projectId: string; r
             </tr>
           </thead>
           <tbody className={tbodyCls}>
-            {rows.map((row) => (
+            {groups.map((group) => (
+              <Fragment key={group.section?.id ?? "none"}>
+                {group.section ? (
+                  <tr className="grid grid-cols-[1fr_auto] items-center gap-x-3 bg-muted/60 p-3 md:table-row md:p-0" data-testid="boq-section">
+                    <td className={`${cell} font-semibold`} colSpan={2}>
+                      {group.section.name}
+                    </td>
+                    <td className={`${cell} text-right font-mono font-semibold tabular-nums`} colSpan={2}>
+                      {formatRM(group.section.total)}
+                    </td>
+                    <td className={`${cell} text-right`} colSpan={2}>
+                      <DeleteSectionButton id={group.section.id} name={group.section.name} />
+                    </td>
+                  </tr>
+                ) : null}
+                {group.rows.map((row) => (
               <tr key={row.id} className="grid grid-cols-3 gap-x-3 gap-y-1 p-3 md:table-row md:p-0">
-                <td className={`${cell} col-span-3 font-medium md:font-normal`}>{row.description}</td>
+                <td className={`${cell} col-span-3 font-medium md:font-normal`}>
+                  {row.itemCode ? <span className="mr-2 text-xs text-muted-foreground">{row.itemCode}</span> : null}
+                  {row.description}
+                  <span className="mt-1 flex items-center gap-2 text-xs font-normal text-muted-foreground" data-testid="boq-progress">
+                    <span className="h-2 w-24 overflow-hidden rounded-full bg-muted" aria-hidden="true">
+                      <span className="block h-full bg-profit" style={{ width: `${Math.min(100, row.percentDone)}%` }} />
+                    </span>
+                    {row.percentDone}% done{Number(row.claimed) > 0 ? ` · ${row.claimed} ${row.unit} claimed` : ""}
+                  </span>
+                </td>
                 <td className={`${cell} col-span-3 text-right text-xs text-muted-foreground md:text-sm`}>
                   {row.qty} {row.unit} × {formatRM(row.rate)}
                 </td>
@@ -568,10 +658,12 @@ function BoqPanel({ projectId, rows, unallocatedActual }: { projectId: string; r
                 </td>
                 <td className={`${cell} col-span-3`}>
                   <div className="flex justify-end">
+                    <ProgressButton id={row.id} description={row.description} unit={row.unit} qty={row.qty} completed={row.completed} claimed={row.claimed} />
                     <EditBoqLineButton
+                      sections={sections}
                       projectId={projectId}
                       id={row.id}
-                      values={{ description: row.description, qty: row.qty, unit: row.unit, rate: row.rate.toFixed(2) }}
+                      values={{ description: row.description, qty: row.qty, unit: row.unit, rate: row.rate.toFixed(2), sectionId: row.sectionId ?? "", itemCode: row.itemCode ?? "" }}
                     />
                     <DeleteIconButton
                       label="Delete BOQ line"
@@ -581,6 +673,8 @@ function BoqPanel({ projectId, rows, unallocatedActual }: { projectId: string; r
                   </div>
                 </td>
               </tr>
+                ))}
+              </Fragment>
             ))}
             {unallocatedActual !== 0 ? (
               <tr className="grid grid-cols-[1fr_auto] gap-x-3 bg-muted/60 p-3 md:table-row md:p-0">

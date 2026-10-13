@@ -58,12 +58,27 @@ export const paymentSchema = z.object({
   claimId: z.string().optional().or(z.literal("")),
 });
 
-export const changeOrderSchema = z.object({
-  date: dateString,
-  description: z.string().trim().min(1, "Enter a description").max(200),
-  amount: nonZeroMoney,
-  boqLineId: z.string().optional().or(z.literal("")),
-});
+export const VO_TYPES = ["ADDITION", "OMISSION", "TIME_EXTENSION"] as const;
+
+export const changeOrderSchema = z
+  .object({
+    date: dateString,
+    description: z.string().trim().min(1, "Enter a description").max(200),
+    amount: money.or(z.literal("")),
+    boqLineId: z.string().optional().or(z.literal("")),
+    voType: z.enum(VO_TYPES).optional(),
+    timeExtensionDays: z.string().trim().regex(/^\d{1,4}$/, "Enter a number of days").optional().or(z.literal("")),
+    submittedBy: z.string().trim().max(80).optional().or(z.literal("")),
+  })
+  .superRefine((v, ctx) => {
+    if (v.voType === "TIME_EXTENSION") {
+      if (!v.timeExtensionDays || Number(v.timeExtensionDays) <= 0) ctx.addIssue({ code: "custom", path: ["timeExtensionDays"], message: "Enter how many days are added" });
+    } else if (v.amount === "") {
+      ctx.addIssue({ code: "custom", path: ["amount"], message: "Enter an amount like 1250.50" });
+    } else if (Number(v.amount) === 0) {
+      ctx.addIssue({ code: "custom", path: ["amount"], message: "Cannot be 0" });
+    }
+  });
 
 export const changeOrderStatusSchema = z.enum(CHANGE_ORDER_STATUSES);
 
@@ -102,11 +117,21 @@ export const boqLineSchema = z.object({
   qty: quantity,
   unit: z.string().trim().min(1, "Enter a unit").max(20),
   rate: unitPrice,
+  sectionId: z.string().optional().or(z.literal("")),
+  itemCode: z.string().trim().max(30).optional().or(z.literal("")),
 });
+
+export const boqSectionSchema = z.object({ name: z.string().trim().min(1, "Name the section, e.g. Substructure").max(80) });
 
 export const claimSchema = z.object({
   date: dateString,
   workDone: positiveMoney,
+  periodFrom: dateString.optional().or(z.literal("")),
+  periodTo: dateString.optional().or(z.literal("")),
+  /** Materials delivered to site but not yet fixed; added to the work done. */
+  materialsOnSite: money.refine((v) => Number(v) >= 0, "Cannot be negative").optional().or(z.literal("")),
+  /** Bill the BOQ progress since the last claim instead of the typed amount. */
+  fromBoq: z.boolean().optional(),
 });
 
 export const releaseRetentionSchema = z.object({

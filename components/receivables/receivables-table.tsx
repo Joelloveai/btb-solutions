@@ -19,6 +19,10 @@ export type ReceivableRow = {
   days: number;
   bucket: "current" | "late" | "overdue" | "critical";
   status: string;
+  claimNo: string;
+  countdown: string;
+  stage: "WITHIN_TERMS" | "PAYMENT_RESPONSE" | "ADJUDICATION";
+  whatsapp: string | null;
 };
 
 // Aging bands: 0-30 green, 31-60 amber, 61-90 orange, 90+ red.
@@ -50,15 +54,28 @@ export function ReceivablesTable({ rows }: { rows: ReceivableRow[] }) {
         </span>
       ),
     },
+    { id: "cipaa", header: "CIPAA", enableSorting: false, accessorFn: (r) => r.countdown, cell: ({ row }) => <span data-testid="cipaa-countdown" className="text-xs">{row.original.claimNo}: {row.original.countdown}</span> },
     { id: "status", header: "Status", accessorFn: (r) => r.status, cell: ({ getValue }) => getValue<string>() },
     {
       id: "actions",
       header: () => <span className="sr-only">Actions</span>,
       enableSorting: false,
       cell: ({ row }) => (
-        <Link href={`/receivables/${row.original.claimId}/reminder`} target="_blank" className={linkButton("accent", true)}>
-          Generate Reminder
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link href={`/receivables/${row.original.claimId}/reminder`} target="_blank" className={linkButton("accent", true)}>
+            Generate Reminder
+          </Link>
+          {row.original.whatsapp ? (
+            <a href={row.original.whatsapp} target="_blank" rel="noreferrer" className={linkButton("secondary", true)}>
+              WhatsApp reminder
+            </a>
+          ) : null}
+          {row.original.stage !== "WITHIN_TERMS" ? (
+            <Link href={`/projects/${row.original.projectId}/claims/${row.original.claimId}`} className={linkButton("secondary", true)}>
+              {row.original.stage === "PAYMENT_RESPONSE" ? "Payment response notice" : "Notice of adjudication"}
+            </Link>
+          ) : null}
+        </div>
       ),
     },
   ];

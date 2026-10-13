@@ -11,6 +11,9 @@ export type ClaimRow = {
   id: string;
   projectId: string;
   number: number;
+  claimNumber: string | null;
+  /** DRAFT, SUBMITTED, CERTIFIED, PAID or DISPUTED as recorded. */
+  stored: string;
   dateText: string;
   dateSort: number;
   workDone: string;
@@ -23,8 +26,10 @@ export type ClaimRow = {
   canDelete: boolean;
 };
 
-const statusOf = (r: ClaimRow) => (r.balanceValue <= 0 ? ("Paid" as const) : r.paidAny ? ("Part paid" as const) : ("Unpaid" as const));
-const statusTone = { Paid: "green", "Part paid": "yellow", Unpaid: "gray" } as const;
+// Money first (what has actually been paid), then what the claim's stage adds: certified or disputed.
+const statusOf = (r: ClaimRow) =>
+  r.balanceValue <= 0 ? ("Paid" as const) : r.stored === "DISPUTED" ? ("Disputed" as const) : r.paidAny ? ("Part paid" as const) : r.stored === "CERTIFIED" ? ("Certified" as const) : ("Unpaid" as const);
+const statusTone = { Paid: "green", "Part paid": "yellow", Unpaid: "gray", Certified: "blue", Disputed: "red" } as const;
 
 /** Claims for one project. On phones the date and balance fold under the first two columns. */
 export function ClaimsTable({ rows }: { rows: ClaimRow[] }) {
@@ -36,6 +41,7 @@ export function ClaimsTable({ rows }: { rows: ClaimRow[] }) {
       cell: ({ row }) => (
         <div>
           <span className="font-semibold">No. {row.original.number}</span>
+          {row.original.claimNumber ? <span className="block text-xs text-muted-foreground">{row.original.claimNumber}</span> : null}
           <span className="block text-xs text-muted-foreground md:hidden">{row.original.dateText}</span>
           <span className="mt-1 block">
             <Badge tone={statusTone[statusOf(row.original)]}>{statusOf(row.original)}</Badge>
@@ -83,6 +89,12 @@ export function ClaimsTable({ rows }: { rows: ClaimRow[] }) {
       enableSorting: false,
       cell: ({ row }) => (
         <div className="flex items-center justify-end gap-1">
+          <Link
+            href={`/projects/${row.original.projectId}/claims/${row.original.id}`}
+            className="rounded-md px-2 py-2 text-sm font-semibold text-foreground hover:bg-muted"
+          >
+            Open
+          </Link>
           <Link
             href={`/projects/${row.original.projectId}/claims/${row.original.id}`}
             target="_blank"

@@ -12,19 +12,21 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { can, isStaffRole } from "@/lib/permissions";
 import { calculateTotals } from "@/lib/calculations";
-import { computeClaim } from "@/lib/claims";
+import { boqClaimLine, claimNumberFor, computeClaim, projectCode } from "@/lib/claims";
 import { PROJECT_STAGES, TEAM_ROLES } from "@/lib/constants";
 import { isLocale } from "@/lib/i18n";
 import { prisma } from "@/lib/prisma";
 import { whatsappNumber } from "@/lib/whatsapp";
 import { createHash, randomBytes } from "node:crypto";
 import { saveDocumentFile, deleteDocumentFile } from "@/lib/document-storage";
+import { buildClaimCertificatePdf } from "@/lib/claim-pdf";
 import { buildDiaryPdf, decodeSignature, diaryContentHash, newPdfKey, pdfIdFromKey, signatureHash } from "@/lib/site-diary";
 import { appendEvent, recorded, rm } from "@/lib/timeline";
 import { actorFromSession } from "@/lib/timeline-actor";
 import { calculateQuote } from "@/lib/quotes";
 import {
   boqLineSchema,
+  boqSectionSchema,
   changeOrderSchema,
   claimSchema,
   dailyLogSchema,
@@ -215,6 +217,13 @@ export async function addPayment(projectId: string, input: unknown, requestId?: 
           clientRequestId: rid,
         },
       });
+      // A claim that is now fully covered by payments is marked paid (the amounts themselves are untouched).
+      if (v.claimId) {
+        const target = await tx.claim.findUnique({ where: { id: v.claimId }, include: { payments: true } });
+        if (target && target.status !== "PAID" && target.payments.reduce((t, p) => t.plus(p.amount), new Prisma.Decimal(0)).greaterThanOrEqualTo(target.netClaim)) {
+          await tx.claim.update({ where: { id: target.id }, data: { status: "PAID", paidAt: new Date() } });
+        }
+      }
       await appendEvent(tx, {
         projectId,
         type: "PAYMENT",
@@ -232,6 +241,14 @@ export async function addPayment(projectId: string, input: unknown, requestId?: 
   }
 }
 
+/** The money effect of a variation: omissions are negative, a time extension is nil. Anyone typing a minus on an addition has made an omission. */
+function voFigures(v: { amount: string; voType?: string }) {
+  if (v.voType === "TIME_EXTENSION") return { voType: "TIME_EXTENSION", amount: "0.00" };
+  const amount = new Prisma.Decimal(v.amount);
+  if (v.voType === "OMISSION") return { voType: "OMISSION", amount: amount.abs().negated().toFixed(2) };
+  return { voType: amount.isNegative() ? "OMISSION" : "ADDITION", amount: amount.toFixed(2) };
+}
+
 export async function addChangeOrder(projectId: string, input: unknown): Promise<ActionResult> {
   try {
     const session = await requireSession();
@@ -239,23 +256,30 @@ export async function addChangeOrder(projectId: string, input: unknown): Promise
     if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
     const v = parsed.data;
     await recorded(async (tx) => {
+      const fig = voFigures(v);
+      const count = await tx.changeOrder.count({ where: { projectId } });
       const order = await tx.changeOrder.create({
         data: {
           projectId,
           date: toDate(v.date),
           description: v.description,
-          amount: v.amount,
+          amount: fig.amount,
           status: "PENDING",
           boqLineId: orNull(v.boqLineId),
+          voNumber: `VO-${String(count + 1).padStart(3, "0")}`,
+          voType: fig.voType,
+          timeExtensionDays: fig.voType === "TIME_EXTENSION" ? Number(v.timeExtensionDays) : null,
+          submittedBy: orNull(v.submittedBy) ?? session.user.name ?? session.user.email ?? null,
+          impactOnContractSum: fig.amount,
         },
       });
       await appendEvent(tx, {
         projectId,
         type: "CHANGE_ORDER",
         actor: actorFromSession(session),
-        title: `Change order raised: ${rm(v.amount)}`,
+        title: fig.voType === "TIME_EXTENSION" ? `Change order raised: ${v.timeExtensionDays} days extra` : `Change order raised: ${rm(order.amount)}`,
         description: v.description,
-        metadata: { action: "added", changeOrderId: order.id, amount: order.amount.toFixed(2) },
+        metadata: { action: "added", changeOrderId: order.id, amount: order.amount.toFixed(2), voNumber: order.voNumber, voType: fig.voType },
       });
     });
     revalidateAll();
@@ -279,6 +303,7 @@ export async function setChangeOrderStatus(
         data: {
           status: parsed.data,
           approvedAt: parsed.data === "APPROVED" ? new Date() : null,
+          approvedBy: parsed.data === "APPROVED" ? session.user.name ?? session.user.email ?? null : null,
         },
       });
       await appendEvent(tx, {
@@ -366,11 +391,21 @@ export async function updateChangeOrder(id: string, input: unknown): Promise<Act
   const parsed = changeOrderSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
   const v = parsed.data;
+  const fig = voFigures(v);
   return mutateRow(
     (tx) =>
       tx.changeOrder.update({
         where: { id },
-        data: { date: toDate(v.date), description: v.description, amount: v.amount, boqLineId: orNull(v.boqLineId) },
+        data: {
+          date: toDate(v.date),
+          description: v.description,
+          amount: fig.amount,
+          boqLineId: orNull(v.boqLineId),
+          voType: fig.voType,
+          timeExtensionDays: fig.voType === "TIME_EXTENSION" ? Number(v.timeExtensionDays) : null,
+          submittedBy: orNull(v.submittedBy),
+          impactOnContractSum: fig.amount,
+        },
       }),
     { type: "CHANGE_ORDER", action: "updated", title: (r) => `Change order corrected: ${rm(r.amount)}`, description: (r) => r.description },
   );
@@ -520,6 +555,7 @@ export async function convertQuoteToProject(id: string): Promise<ActionResult<{ 
               unit: l.unit,
               rate: l.unitPrice,
               amount: l.amount,
+              remainingQuantity: l.qty,
             })),
           },
         },
@@ -541,9 +577,18 @@ export async function convertQuoteToProject(id: string): Promise<ActionResult<{ 
 // BOQ
 // ---------------------------------------------------------------------------
 
-function boqData(v: { description: string; qty: string; unit: string; rate: string }) {
+function boqData(v: { description: string; qty: string; unit: string; rate: string; sectionId?: string; itemCode?: string }) {
   const amount = new Prisma.Decimal(v.qty).times(v.rate).toDP(2);
-  return { description: v.description, qty: v.qty, unit: v.unit, rate: v.rate, amount: amount.toFixed(2) };
+  return { description: v.description, qty: v.qty, unit: v.unit, rate: v.rate, amount: amount.toFixed(2), sectionId: orNull(v.sectionId), itemCode: orNull(v.itemCode) };
+}
+
+/** A section's total is always the sum of its lines; call after any line or section change. */
+async function refreshSectionTotals(projectId: string) {
+  const sections = await prisma.boqSection.findMany({ where: { projectId }, include: { lines: { select: { amount: true } } } });
+  for (const section of sections) {
+    const total = section.lines.reduce((t, l) => t.plus(l.amount), new Prisma.Decimal(0));
+    if (!total.equals(section.totalAmount)) await prisma.boqSection.update({ where: { id: section.id }, data: { totalAmount: total } });
+  }
 }
 
 export async function addBoqLine(projectId: string, input: unknown): Promise<ActionResult> {
@@ -553,8 +598,9 @@ export async function addBoqLine(projectId: string, input: unknown): Promise<Act
     if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
     const last = await prisma.boqLine.aggregate({ where: { projectId }, _max: { position: true } });
     await prisma.boqLine.create({
-      data: { projectId, position: (last._max.position ?? -1) + 1, ...boqData(parsed.data) },
+      data: { projectId, position: (last._max.position ?? -1) + 1, ...boqData(parsed.data), remainingQuantity: parsed.data.qty },
     });
+    await refreshSectionTotals(projectId);
     revalidateAll();
     return { ok: true };
   } catch (error) {
@@ -567,7 +613,10 @@ export async function updateBoqLine(id: string, input: unknown): Promise<ActionR
     await requireSession();
     const parsed = boqLineSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
-    await prisma.boqLine.update({ where: { id }, data: boqData(parsed.data) });
+    const line = await prisma.boqLine.findUniqueOrThrow({ where: { id } });
+    if (new Prisma.Decimal(parsed.data.qty).lessThan(line.completedQuantity)) return { ok: false, error: "The quantity cannot be less than what is already done." };
+    await prisma.boqLine.update({ where: { id }, data: { ...boqData(parsed.data), remainingQuantity: new Prisma.Decimal(parsed.data.qty).minus(line.completedQuantity) } });
+    await refreshSectionTotals(line.projectId);
     revalidateAll();
     return { ok: true };
   } catch (error) {
@@ -578,10 +627,70 @@ export async function updateBoqLine(id: string, input: unknown): Promise<ActionR
 export async function deleteBoqLine(id: string): Promise<ActionResult> {
   try {
     await requireSession();
-    await prisma.boqLine.delete({ where: { id } });
+    const line = await prisma.boqLine.delete({ where: { id } });
+    await refreshSectionTotals(line.projectId);
     revalidateAll();
     return { ok: true };
   } catch (error) {
+    return failure(error);
+  }
+}
+
+export async function createBoqSection(projectId: string, input: unknown): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    const parsed = boqSectionSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+    await recorded(async (tx) => {
+      const last = await tx.boqSection.aggregate({ where: { projectId }, _max: { order: true } });
+      await tx.boqSection.create({ data: { projectId, name: parsed.data.name, order: (last._max.order ?? -1) + 1 } });
+      await appendEvent(tx, { projectId, type: "NOTE", actor: actorFromSession(session), title: `BOQ section added: ${parsed.data.name}`, metadata: { action: "boq-section-added" } });
+    });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+export async function deleteBoqSection(id: string): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    await recorded(async (tx) => {
+      const section = await tx.boqSection.delete({ where: { id } }); // its lines stay, just unsectioned
+      await appendEvent(tx, { projectId: section.projectId, type: "NOTE", actor: actorFromSession(session), title: `BOQ section removed: ${section.name}`, metadata: { action: "boq-section-deleted" } });
+    });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+/** Record how much of a BOQ item is physically done. The next claim can then bill the difference. */
+export async function updateBoqProgress(id: string, completedQuantity: string): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    if (!/^\d{1,10}(\.\d{1,3})?$/.test(completedQuantity)) return { ok: false, error: "Enter a quantity like 12.5" };
+    const done = new Prisma.Decimal(completedQuantity);
+    await recorded(async (tx) => {
+      const line = await tx.boqLine.findUniqueOrThrow({ where: { id } });
+      if (done.greaterThan(line.qty)) throw new Error(`progress: only ${line.qty} ${line.unit} in the contract.`);
+      if (done.lessThan(line.claimedQuantity)) throw new Error(`progress: ${line.claimedQuantity} ${line.unit} has already been claimed.`);
+      await tx.boqLine.update({ where: { id }, data: { completedQuantity: done, remainingQuantity: line.qty.minus(done) } });
+      await appendEvent(tx, {
+        projectId: line.projectId,
+        type: "NOTE",
+        actor: actorFromSession(session),
+        title: `BOQ progress: ${line.description} is ${line.qty.isZero() ? 0 : done.dividedBy(line.qty).times(100).toDP(0).toNumber()}% done`,
+        description: `${done} of ${line.qty} ${line.unit}`,
+        metadata: { action: "boq-progress", boqLineId: id, completed: done.toString() },
+      });
+    });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("progress: ")) return { ok: false, error: error.message.slice(10) };
     return failure(error);
   }
 }
@@ -599,19 +708,24 @@ export async function issueClaim(projectId: string, input: unknown): Promise<Act
     const claim = await recorded(async (tx) => {
       const project = await tx.project.findUniqueOrThrow({
         where: { id: projectId },
-        include: { claims: true, changeOrders: true },
+        include: { claims: true, changeOrders: true, boqLines: true },
       });
       const sum = (values: Prisma.Decimal.Value[]) =>
         values.reduce<Prisma.Decimal>((t, x) => t.plus(x), new Prisma.Decimal(0));
+      // The amount for this period: typed in, or billed from BOQ progress since the last claim; plus materials on site.
+      const boqLinesToBill = v.fromBoq ? project.boqLines.map(boqClaimLine).flatMap((l, i) => (l ? [{ ...l, boqLineId: project.boqLines[i]!.id, completed: project.boqLines[i]!.completedQuantity }] : [])) : [];
+      if (v.fromBoq && boqLinesToBill.length === 0) throw new Error("claim: There is no new BOQ progress to claim. Update progress on the BOQ tab first.");
+      const periodWork = v.fromBoq ? sum(boqLinesToBill.map((l) => l.currentAmount)) : new Prisma.Decimal(v.workDone);
+      const workDoneThisClaim = periodWork.plus(v.materialsOnSite || 0);
       const previousWork = sum(project.claims.map((c) => c.workDone));
       const approved = sum(project.changeOrders.filter((c) => c.status === "APPROVED").map((c) => c.amount));
       const ceiling = project.contractValue.plus(approved);
-      if (previousWork.plus(v.workDone).greaterThan(ceiling)) {
+      if (previousWork.plus(workDoneThisClaim).greaterThan(ceiling)) {
         const left = ceiling.minus(previousWork);
         throw new Error(`That is more than the contract. At most RM ${left.toFixed(2)} is left to claim.`);
       }
       const figures = computeClaim({
-        workDone: v.workDone,
+        workDone: workDoneThisClaim,
         retentionPercent: project.retentionPercent,
         sstEnabled: project.sstEnabled,
         sstRate: project.sstRate,
@@ -633,8 +747,28 @@ export async function issueClaim(projectId: string, input: unknown): Promise<Act
           retentionAmount: figures.retentionAmount.toFixed(2),
           previousClaimed: figures.previousClaimed.toFixed(2),
           netClaim: figures.netClaim.toFixed(2),
+          claimNumber: claimNumberFor(projectCode(project.name), toDate(v.date), bumped.lastClaimNumber),
+          periodFrom: v.periodFrom ? toDate(v.periodFrom) : null,
+          periodTo: v.periodTo ? toDate(v.periodTo) : null,
+          materialsOnSiteAmount: new Prisma.Decimal(v.materialsOnSite || 0).toFixed(2),
+          status: "SUBMITTED",
+          submittedAt: new Date(),
+          lineItems: {
+            create: boqLinesToBill.map((l) => ({
+              boqLineId: l.boqLineId,
+              description: l.description,
+              unit: l.unit,
+              quantity: l.quantity,
+              rate: l.rate,
+              amount: l.amount,
+              previousAmount: l.previousAmount,
+              currentAmount: l.currentAmount,
+            })),
+          },
         },
       });
+      // What has now been billed cannot be billed again.
+      for (const l of boqLinesToBill) await tx.boqLine.update({ where: { id: l.boqLineId }, data: { claimedQuantity: l.completed } });
       await appendEvent(tx, {
         projectId,
         type: "CLAIM",
@@ -651,6 +785,7 @@ export async function issueClaim(projectId: string, input: unknown): Promise<Act
     if (error instanceof Error && error.message.startsWith("That is more than")) {
       return { ok: false, error: error.message };
     }
+    if (error instanceof Error && error.message.startsWith("claim: ")) return { ok: false, error: error.message.slice(7) };
     return failure(error);
   }
 }
@@ -664,6 +799,9 @@ export async function deleteClaim(id: string): Promise<ActionResult> {
       const project = await tx.project.findUniqueOrThrow({ where: { id: claim.projectId } });
       if (claim.number !== project.lastClaimNumber) throw new Error("claim: only the latest claim can be deleted.");
       if (claim.payments.length > 0) throw new Error("claim: this claim has payments recorded against it.");
+      // Take back the BOQ quantities this claim had billed, so they can be billed again.
+      const lines = await tx.claimLineItem.findMany({ where: { claimId: id } });
+      for (const l of lines) if (l.boqLineId) await tx.boqLine.update({ where: { id: l.boqLineId }, data: { claimedQuantity: { decrement: l.quantity } } });
       await tx.claim.delete({ where: { id } });
       await tx.project.update({ where: { id: project.id }, data: { lastClaimNumber: { decrement: 1 } } });
       await appendEvent(tx, {
@@ -1504,6 +1642,7 @@ export async function decideChangeOrder(id: string, decision: unknown): Promise<
           clientDecidedById: clientUser.id,
           status: decision,
           approvedAt: decision === "APPROVED" ? now : null,
+          approvedBy: decision === "APPROVED" ? `${clientUser.name ?? clientUser.email} (client portal)` : null,
         },
       });
       await appendEvent(tx, {
@@ -2209,6 +2348,77 @@ export async function removeTeamMember(id: string): Promise<ActionResult> {
     revalidateAll();
     return { ok: true };
   } catch (error) {
+    return failure(error);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Claim certification and disputes (Priority 2)
+// ---------------------------------------------------------------------------
+
+/** The QS / architect / client's representative certifies the claim. The certificate is kept as a PDF. */
+export async function certifyClaim(claimId: string, input: { certifiedAmount: string; certifiedBy: string; remarks?: string }): Promise<ActionResult> {
+  let saved: { id: string; fileKey: string; mimeType: string } | null = null;
+  try {
+    const session = await requireSession();
+    if (!/^\d{1,10}(\.\d{1,2})?$/.test(input.certifiedAmount) || Number(input.certifiedAmount) <= 0) return { ok: false, error: "Enter the certified amount, like 38000.00" };
+    const by = input.certifiedBy.trim();
+    if (!by) return { ok: false, error: "Enter who certified it." };
+    const claim = await prisma.claim.findUnique({ where: { id: claimId }, include: { project: true, certificates: true } });
+    if (!claim) return { ok: false, error: "Claim not found." };
+    if (claim.status === "PAID") return { ok: false, error: "This claim is already paid." };
+    const certifiedAt = new Date();
+    const certificateNumber = `${claim.claimNumber ?? `CLM/${claim.number}`}/CERT${claim.certificates.length > 0 ? `-${claim.certificates.length + 1}` : ""}`;
+    const pdf = await buildClaimCertificatePdf({
+      projectName: claim.project.name,
+      clientName: claim.project.clientName,
+      claimNumber: claim.claimNumber ?? `Claim ${claim.number}`,
+      claimDate: claim.date,
+      claimedText: rm(claim.amountClaimed),
+      netClaimText: rm(claim.netClaim),
+      certifiedText: rm(input.certifiedAmount),
+      certificateNumber,
+      certifiedBy: by,
+      certifiedAt,
+      remarks: input.remarks?.trim() || null,
+    });
+    const pdfKey = newPdfKey(claim.projectId);
+    saved = { id: pdfIdFromKey(pdfKey), fileKey: pdfKey, mimeType: "application/pdf" };
+    await saveDocumentFile(saved, pdf);
+    await recorded(async (tx) => {
+      await tx.claimCertificate.create({ data: { claimId, certificateNumber, certifiedAmount: input.certifiedAmount, certifiedBy: by, certifiedAt, remarks: input.remarks?.trim() || null, pdfKey } });
+      await tx.claim.update({ where: { id: claimId }, data: { status: "CERTIFIED", certifiedAt, certifiedBy: by } });
+      await appendEvent(tx, {
+        projectId: claim.projectId,
+        type: "CLAIM",
+        actor: actorFromSession(session),
+        title: `Progress claim ${claim.number} certified: ${rm(input.certifiedAmount)}`,
+        description: `Certified by ${by}${input.remarks?.trim() ? `. ${input.remarks.trim()}` : ""}`,
+        metadata: { action: "certified", claimId, certificateNumber, certifiedAmount: new Prisma.Decimal(input.certifiedAmount).toFixed(2) },
+      });
+    });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    if (saved) await deleteDocumentFile(saved).catch(() => undefined);
+    return failure(error);
+  }
+}
+
+/** Flag (or un-flag) a claim as disputed by the client. */
+export async function setClaimDisputed(claimId: string, disputed: boolean): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    await recorded(async (tx) => {
+      const claim = await tx.claim.findUniqueOrThrow({ where: { id: claimId } });
+      if (claim.status === "PAID") throw new Error("claim: This claim is already paid.");
+      await tx.claim.update({ where: { id: claimId }, data: { status: disputed ? "DISPUTED" : claim.certifiedAt ? "CERTIFIED" : "SUBMITTED" } });
+      await appendEvent(tx, { projectId: claim.projectId, type: "CLAIM", actor: actorFromSession(session), title: `Progress claim ${claim.number} ${disputed ? "marked as disputed" : "no longer disputed"}`, metadata: { action: disputed ? "disputed" : "undisputed", claimId } });
+    });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("claim: ")) return { ok: false, error: error.message.slice(7) };
     return failure(error);
   }
 }
