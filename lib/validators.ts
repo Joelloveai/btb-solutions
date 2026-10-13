@@ -1,5 +1,8 @@
 import { z } from "zod";
 import {
+  CIDB_GRADES,
+  CONTRACT_TYPES,
+  PROJECT_TYPES,
   DIARY_MACHINERY,
   DIARY_MANPOWER_TRADES,
   DIARY_WEATHER,
@@ -200,3 +203,49 @@ export const diarySchema = z.object({
   signature: z.string().max(400_000),
 });
 export type DiaryInput = z.infer<typeof diarySchema>;
+
+// ---- Contract details, milestones, team (Priority 1) ----
+const optionalPercent = z
+  .string()
+  .trim()
+  .regex(/^\d{1,3}(\.\d{1,2})?$/, "Enter a percentage like 2.5")
+  .refine((v) => Number(v) <= 100, "Cannot be more than 100")
+  .optional()
+  .or(z.literal(""));
+const optionalCoord = (min: number, max: number, label: string) =>
+  z
+    .string()
+    .trim()
+    .refine((v) => v === "" || (Number.isFinite(Number(v)) && Number(v) >= min && Number(v) <= max), `${label} must be between ${min} and ${max}`)
+    .optional();
+
+export const contractDetailsSchema = z.object({
+  projectType: z.enum(PROJECT_TYPES).optional().or(z.literal("")),
+  contractType: z.enum(CONTRACT_TYPES).optional().or(z.literal("")),
+  cidbGrade: z.enum(CIDB_GRADES).optional().or(z.literal("")),
+  cidbProjectRef: z.string().trim().max(80).optional().or(z.literal("")),
+  architectName: z.string().trim().max(120).optional().or(z.literal("")),
+  engineerName: z.string().trim().max(120).optional().or(z.literal("")),
+  consultantName: z.string().trim().max(120).optional().or(z.literal("")),
+  siteAddress: z.string().trim().max(300).optional().or(z.literal("")),
+  siteLatitude: optionalCoord(-90, 90, "Latitude"),
+  siteLongitude: optionalCoord(-180, 180, "Longitude"),
+  contractEndDate: dateString.optional().or(z.literal("")),
+  defectsLiabilityPeriodDays: z.string().trim().regex(/^\d{1,4}$/, "Enter a number of days like 365"),
+  retentionReleasePercent: optionalPercent,
+  performanceBondPercent: optionalPercent,
+  sstRate: optionalPercent,
+});
+export type ContractDetailsInput = z.infer<typeof contractDetailsSchema>;
+
+export const milestoneEntrySchema = z
+  .object({
+    name: z.string().trim().min(1, "Name the milestone, e.g. Slab poured").max(120),
+    description: z.string().trim().max(500).optional().or(z.literal("")),
+    dueDate: dateString,
+    weightagePercent: z.string().trim().regex(/^\d{1,3}(\.\d{1,2})?$/, "Enter a percentage like 10").refine((v) => Number(v) <= 100, "Cannot be more than 100"),
+    paymentTrigger: z.boolean(),
+    paymentAmount: money.optional().or(z.literal("")),
+  })
+  .refine((v) => !v.paymentTrigger || (v.paymentAmount && Number(v.paymentAmount) > 0), { message: "Enter the payment amount for this milestone", path: ["paymentAmount"] });
+export type MilestoneEntryInput = z.infer<typeof milestoneEntrySchema>;

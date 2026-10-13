@@ -125,3 +125,15 @@ export const TIMELINE_FILTERS = [
 export const DIARY_WEATHER = ["Sunny", "Cloudy", "Rain", "Heavy rain"] as const;
 export const DIARY_MACHINERY = ["Excavator", "Crane", "Concrete mixer", "Scaffolding", "Generator", "Compressor", "Lorry"] as const;
 export const DIARY_MANPOWER_TRADES = ["General worker", ...PHOTO_TRADES] as const;
+
+// ---- Contract management ----
+export const PROJECT_TYPES = ["RESIDENTIAL", "COMMERCIAL", "INDUSTRIAL", "INFRASTRUCTURE", "RENOVATION", "INTERIOR"] as const;
+export const PROJECT_TYPE_LABELS: Record<(typeof PROJECT_TYPES)[number], string> = { RESIDENTIAL: "Residential", COMMERCIAL: "Commercial", INDUSTRIAL: "Industrial", INFRASTRUCTURE: "Infrastructure", RENOVATION: "Renovation", INTERIOR: "Interior fit-out" };
+export const CONTRACT_TYPES = ["LUMP_SUM", "BQ_BASED", "COST_PLUS", "DESIGN_BUILD", "TURNKEY"] as const;
+export const CONTRACT_TYPE_LABELS: Record<(typeof CONTRACT_TYPES)[number], string> = { LUMP_SUM: "Lump sum", BQ_BASED: "Bill of quantities", COST_PLUS: "Cost plus", DESIGN_BUILD: "Design and build", TURNKEY: "Turnkey" };
+export const MILESTONE_STATUSES = ["PENDING", "IN_PROGRESS", "COMPLETED", "DELAYED"] as const;
+export const MILESTONE_STATUS_LABELS: Record<(typeof MILESTONE_STATUSES)[number], string> = { PENDING: "Not started", IN_PROGRESS: "In progress", COMPLETED: "Done", DELAYED: "Late" };
+export const TEAM_ROLES = ["PROJECT_MANAGER", "SITE_SUPERVISOR", "SAFETY_OFFICER", "QUANTITY_SURVEYOR", "ADMIN"] as const;
+export const TEAM_ROLE_LABELS: Record<(typeof TEAM_ROLES)[number], string> = { PROJECT_MANAGER: "Project manager", SITE_SUPERVISOR: "Site supervisor", SAFETY_OFFICER: "Safety officer", QUANTITY_SURVEYOR: "Quantity surveyor", ADMIN: "Admin" };
+/** CIDB contractor grades, G1 (smallest) to G7. */
+export const CIDB_GRADES = ["G1", "G2", "G3", "G4", "G5", "G6", "G7"] as const;

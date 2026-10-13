@@ -13,7 +13,7 @@ import { authOptions } from "@/lib/auth";
 import { can, isStaffRole } from "@/lib/permissions";
 import { calculateTotals } from "@/lib/calculations";
 import { computeClaim } from "@/lib/claims";
-import { PROJECT_STAGES } from "@/lib/constants";
+import { PROJECT_STAGES, TEAM_ROLES } from "@/lib/constants";
 import { isLocale } from "@/lib/i18n";
 import { prisma } from "@/lib/prisma";
 import { whatsappNumber } from "@/lib/whatsapp";
@@ -29,6 +29,8 @@ import {
   claimSchema,
   dailyLogSchema,
   diarySchema,
+  contractDetailsSchema,
+  milestoneEntrySchema,
   loginUserSchema,
   milestoneSchema,
   punchSchema,
@@ -2060,6 +2062,150 @@ export async function changeOwnPassword(current: string, next: string): Promise<
     if (!user || !(await bcrypt.compare(current, user.passwordHash))) return { ok: false, error: "Your current password is not right." };
     if (current === next) return { ok: false, error: "Choose a different password from the old one." };
     await prisma.user.update({ where: { id: user.id }, data: { passwordHash: await bcrypt.hash(pw.data, 10), mustChangePassword: false } });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Contract particulars, milestones and team (Priority 1)
+// ---------------------------------------------------------------------------
+
+const num = (v?: string) => (v && v.trim() !== "" ? Number(v) : null);
+
+export async function updateContractDetails(projectId: string, input: unknown): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    const parsed = contractDetailsSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+    const v = parsed.data;
+    await recorded(async (tx) => {
+      await tx.project.update({
+        where: { id: projectId },
+        data: {
+          projectType: orNull(v.projectType),
+          contractType: orNull(v.contractType),
+          cidbGrade: orNull(v.cidbGrade),
+          cidbProjectRef: orNull(v.cidbProjectRef),
+          architectName: orNull(v.architectName),
+          engineerName: orNull(v.engineerName),
+          consultantName: orNull(v.consultantName),
+          siteAddress: orNull(v.siteAddress),
+          siteLatitude: num(v.siteLatitude),
+          siteLongitude: num(v.siteLongitude),
+          contractEndDate: v.contractEndDate ? toDate(v.contractEndDate) : null,
+          defectsLiabilityPeriodDays: Number(v.defectsLiabilityPeriodDays),
+          ...(v.retentionReleasePercent ? { retentionReleasePercent: v.retentionReleasePercent } : {}),
+          performanceBondPercent: v.performanceBondPercent ? v.performanceBondPercent : null,
+          ...(v.sstRate ? { sstRate: v.sstRate } : {}),
+        },
+      });
+      await appendEvent(tx, { projectId, type: "NOTE", actor: actorFromSession(session), title: "Contract details updated", metadata: { action: "contract-details" } });
+    });
+    revalidatePath(`/projects/${projectId}`);
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+export async function createMilestone(projectId: string, input: unknown): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    const parsed = milestoneEntrySchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+    const v = parsed.data;
+    await recorded(async (tx) => {
+      const m = await tx.milestone.create({
+        data: {
+          projectId,
+          name: v.name,
+          description: orNull(v.description),
+          dueDate: toDate(v.dueDate),
+          weightagePercent: v.weightagePercent,
+          paymentTrigger: v.paymentTrigger,
+          paymentAmount: v.paymentTrigger && v.paymentAmount ? v.paymentAmount : null,
+        },
+      });
+      await appendEvent(tx, {
+        projectId,
+        type: "TASK_CREATED",
+        actor: actorFromSession(session),
+        title: `Milestone set: ${v.name}`,
+        description: `Due ${v.dueDate}`,
+        metadata: { action: "milestone-added", milestoneId: m.id, dueDate: v.dueDate },
+      });
+    });
+    revalidatePath(`/projects/${projectId}`);
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+export async function completeMilestone(id: string): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    await recorded(async (tx) => {
+      const m = await tx.milestone.findUniqueOrThrow({ where: { id } });
+      if (m.completedDate) return; // a second tap changes nothing
+      await tx.milestone.update({ where: { id }, data: { status: "COMPLETED", completedDate: new Date() } });
+      await appendEvent(tx, {
+        projectId: m.projectId,
+        type: "TASK_COMPLETED",
+        actor: actorFromSession(session),
+        title: `Milestone reached: ${m.name}`,
+        description: m.paymentTrigger && m.paymentAmount ? `This triggers a payment claim of ${rm(m.paymentAmount)}.` : null,
+        metadata: { action: "milestone-completed", milestoneId: id },
+      });
+    });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+export async function deleteMilestone(id: string): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    await recorded(async (tx) => {
+      const m = await tx.milestone.delete({ where: { id } });
+      await appendEvent(tx, { projectId: m.projectId, type: "TASK_CREATED", actor: actorFromSession(session), title: `Milestone removed: ${m.name}`, metadata: { action: "milestone-deleted", milestoneId: id } });
+    });
+    revalidateAll();
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+export async function assignTeamMember(projectId: string, userId: string, role: string): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    if (!(TEAM_ROLES as readonly string[]).includes(role)) return { ok: false, error: "Choose a role." };
+    const user = await prisma.user.findFirst({ where: { id: userId, subcontractorId: null, isActive: true } });
+    if (!user) return { ok: false, error: "Choose a person from the list." };
+    await recorded(async (tx) => {
+      await tx.projectTeamMember.upsert({ where: { projectId_userId: { projectId, userId } }, create: { projectId, userId, role }, update: { role } });
+      await appendEvent(tx, { projectId, type: "NOTE", actor: actorFromSession(session), title: `${user.name ?? user.email} joined the project team`, description: role.replace(/_/g, " ").toLowerCase(), metadata: { action: "team-added", userId, role } });
+    });
+    revalidatePath(`/projects/${projectId}`);
+    return { ok: true };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+export async function removeTeamMember(id: string): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    await recorded(async (tx) => {
+      const member = await tx.projectTeamMember.delete({ where: { id }, include: { user: true } });
+      await appendEvent(tx, { projectId: member.projectId, type: "NOTE", actor: actorFromSession(session), title: `${member.user.name ?? member.user.email} left the project team`, metadata: { action: "team-removed", userId: member.userId } });
+    });
     revalidateAll();
     return { ok: true };
   } catch (error) {

@@ -8,63 +8,82 @@ datasource db {
 }
 
 model User {
-  id                 String         @id @default(cuid())
-  email              String         @unique
+  id                 String              @id @default(cuid())
+  email              String              @unique
   passwordHash       String
   name               String?
-  locale             String         @default("en")
+  locale             String              @default("en")
   /// Office role: ADMIN, MANAGER, SUPERVISOR or VIEWER. Only meaningful when subcontractorId is empty.
   /// Defaults to the least powerful so a login made without thinking about it can do nothing harmful.
-  role               String         @default("VIEWER")
-  isActive           Boolean        @default(true)
+  role               String              @default("VIEWER")
+  isActive           Boolean             @default(true)
   /// True after an admin sets a temporary password; cleared when the person chooses their own.
-  mustChangePassword Boolean        @default(false)
+  mustChangePassword Boolean             @default(false)
   lastLoginAt        DateTime?
   /// Subcontractors sign in with phone + PIN. Digits only, international form (60123456789). Unique across users.
-  phone              String?        @unique
+  phone              String?             @unique
   /// Set for a subcontractor's task-log login; staff users leave it empty.
   subcontractorId    String?
-  subcontractor      Subcontractor? @relation(fields: [subcontractorId], references: [id], onDelete: SetNull)
-  createdAt          DateTime       @default(now())
+  subcontractor      Subcontractor?      @relation(fields: [subcontractorId], references: [id], onDelete: SetNull)
+  createdAt          DateTime            @default(now())
+  teamMemberships    ProjectTeamMember[]
 }
 
 model Project {
-  id                String             @id @default(cuid())
-  name              String
-  contractRef       String?
-  clientName        String?
-  contractValue     Decimal
-  startDate         DateTime?
-  status            String             @default("ACTIVE")
-  sstEnabled        Boolean            @default(false)
-  sstRate           Decimal            @default(6.00)
-  lastClaimNumber   Int                @default(0)
-  retentionPercent  Decimal            @default(5.00)
-  retentionReleased Decimal            @default(0)
-  costs             CostEntry[]
-  payments          Payment[]
-  changeOrders      ChangeOrder[]
-  boqLines          BoqLine[]
-  claims            Claim[]
-  quote             Quote?
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  Client            Client?            @relation(fields: [clientId], references: [id])
-  clientId          String?
-  photos            Photo[]
-  tasks             Task[]
-  punchItems        PunchItem[]
-  documents         Document[]
+  id                         String              @id @default(cuid())
+  name                       String
+  contractRef                String?
+  clientName                 String?
+  contractValue              Decimal
+  startDate                  DateTime?
+  status                     String              @default("ACTIVE")
+  sstEnabled                 Boolean             @default(false)
+  sstRate                    Decimal             @default(6.00)
+  lastClaimNumber            Int                 @default(0)
+  retentionPercent           Decimal             @default(5.00)
+  retentionReleased          Decimal             @default(0)
+  /// Contract particulars (Priority 1). The contract START date is the existing `startDate`.
+  projectType                String?
+  contractType               String?
+  cidbGrade                  String?
+  cidbProjectRef             String?
+  architectName              String?
+  engineerName               String?
+  consultantName             String?
+  siteAddress                String?
+  siteLatitude               Float?
+  siteLongitude              Float?
+  contractEndDate            DateTime?
+  defectsLiabilityPeriodDays Int                 @default(365)
+  /// Share of the contract sum released at practical completion; the rest after the defects liability period.
+  retentionReleasePercent    Decimal             @default(2.50)
+  performanceBondPercent     Decimal?
+  milestones                 Milestone[]
+  teamMembers                ProjectTeamMember[]
+  costs                      CostEntry[]
+  payments                   Payment[]
+  changeOrders               ChangeOrder[]
+  boqLines                   BoqLine[]
+  claims                     Claim[]
+  quote                      Quote?
+  createdAt                  DateTime            @default(now())
+  updatedAt                  DateTime            @updatedAt
+  Client                     Client?             @relation(fields: [clientId], references: [id])
+  clientId                   String?
+  photos                     Photo[]
+  tasks                      Task[]
+  punchItems                 PunchItem[]
+  documents                  Document[]
   /// One of PROJECT_STAGES (lib/constants.ts): shown to the client as the current stage of the job.
-  stage             String?
-  selections        Selection[]
-  dailyLogs         DailyLog[]
-  paymentMilestones PaymentMilestone[]
-  timelineEvents    TimelineEvent[]
-  siteDiaries       SiteDiary[]
-  evidencePacks     EvidencePack[]
-  messages          ProjectMessage[]
-  clientDigests     ClientDigest[]
+  stage                      String?
+  selections                 Selection[]
+  dailyLogs                  DailyLog[]
+  paymentMilestones          PaymentMilestone[]
+  timelineEvents             TimelineEvent[]
+  siteDiaries                SiteDiary[]
+  evidencePacks              EvidencePack[]
+  messages                   ProjectMessage[]
+  clientDigests              ClientDigest[]
 }
 
 model CostEntry {
@@ -520,4 +539,35 @@ model ClientDigest {
   createdAt  DateTime @default(now())
 
   @@unique([projectId, weekEnding])
+}
+
+/// A contract milestone (not a client payment instalment: see PaymentMilestone). Status DELAYED is also shown
+/// automatically for an unfinished milestone past its due date.
+model Milestone {
+  id               String    @id @default(cuid())
+  projectId        String
+  project          Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name             String
+  description      String?
+  dueDate          DateTime
+  completedDate    DateTime?
+  status           String    @default("PENDING")
+  weightagePercent Decimal   @default(0)
+  paymentTrigger   Boolean   @default(false)
+  paymentAmount    Decimal?
+  createdAt        DateTime  @default(now())
+
+  @@index([projectId, dueDate])
+}
+
+model ProjectTeamMember {
+  id         String   @id @default(cuid())
+  projectId  String
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role       String
+  assignedAt DateTime @default(now())
+
+  @@unique([projectId, userId])
 }

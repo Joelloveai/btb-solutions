@@ -10,7 +10,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { ChevronLeft } from "lucide-react";
 import { summarizeProject, type ProjectSummary } from "@/lib/project-summary";
 import { ReleaseRetentionButton } from "@/components/forms/release-retention-form";
-import { CATEGORY_LABELS, PROJECT_STATUS_LABELS, type ProjectStatus, type PunchStatus } from "@/lib/constants";
+import { CATEGORY_LABELS, CONTRACT_TYPE_LABELS, PROJECT_TYPE_LABELS, TEAM_ROLE_LABELS, PROJECT_STATUS_LABELS, type ProjectStatus, type PunchStatus } from "@/lib/constants";
 import { formatDate, formatDateTime, formatRM, todayInMalaysia } from "@/lib/format";
 import { buildPaymentSchedule } from "@/lib/payment-schedule";
 import { reminderLink } from "@/lib/whatsapp";
@@ -21,6 +21,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { can } from "@/lib/permissions";
+import { displayStatus, weightedProgress } from "@/lib/milestones";
+import type { ContractDetailsInput } from "@/lib/validators";
 import { evidenceQuality } from "@/lib/evidence-quality";
 import { fetchTimelinePage } from "@/lib/timeline-query";
 import { Prisma } from "@prisma/client";
@@ -48,6 +50,8 @@ export default async function ProjectPage({ params }: { params: { id: string } }
       dailyLogs: { orderBy: [{ date: "desc" }, { createdAt: "desc" }] },
       paymentMilestones: { orderBy: { position: "asc" } },
       messages: { orderBy: { createdAt: "desc" } },
+      milestones: { orderBy: { dueDate: "asc" } },
+      teamMembers: { include: { user: { select: { name: true, email: true } } }, orderBy: { assignedAt: "asc" } },
     },
   });
   if (!project) notFound();
@@ -69,6 +73,26 @@ export default async function ProjectPage({ params }: { params: { id: string } }
 
   const { locale, t } = await getT();
   const money = (value: number) => formatRM(value, locale);
+  const staffPeople = await prisma.user.findMany({ where: { subcontractorId: null, isActive: true }, select: { id: true, name: true, email: true }, orderBy: { name: "asc" } });
+  const todayKl = todayInMalaysia();
+  const dateText = (d: Date | null) => (d ? formatDate(d, locale) : null);
+  const facts: [string, string][] = [
+    ["Project type", project.projectType ? PROJECT_TYPE_LABELS[project.projectType as keyof typeof PROJECT_TYPE_LABELS] ?? project.projectType : ""],
+    ["Contract type", project.contractType ? CONTRACT_TYPE_LABELS[project.contractType as keyof typeof CONTRACT_TYPE_LABELS] ?? project.contractType : ""],
+    ["Contract start", dateText(project.startDate) ?? ""],
+    ["Contract end", dateText(project.contractEndDate) ?? ""],
+    ["Defects liability", `${project.defectsLiabilityPeriodDays} days`],
+    ["Retention held", `${Number(project.retentionPercent)}%`],
+    ["Released at completion", `${Number(project.retentionReleasePercent)}%`],
+    ["Performance bond", project.performanceBondPercent ? `${Number(project.performanceBondPercent)}%` : ""],
+    ["CIDB grade", project.cidbGrade ?? ""],
+    ["CIDB project ref", project.cidbProjectRef ?? ""],
+    ["Architect", project.architectName ?? ""],
+    ["Engineer", project.engineerName ?? ""],
+    ["Consultant", project.consultantName ?? ""],
+    ["Site address", project.siteAddress ?? ""],
+    ["Site GPS", project.siteLatitude !== null && project.siteLongitude !== null ? `${project.siteLatitude}, ${project.siteLongitude}` : ""],
+  ];
   const summary = summarizeProject(project);
   const totals = summary;
   const contractWithSst = new Prisma.Decimal(totals.revisedContractValue).plus(totals.sstAmount).toNumber();
@@ -269,6 +293,40 @@ export default async function ProjectPage({ params }: { params: { id: string } }
       <ProjectTabs
         projectId={project.id}
         timeline={timeline}
+        contract={{
+          view: { facts },
+          details: {
+            projectType: (project.projectType ?? "") as ContractDetailsInput["projectType"],
+            contractType: (project.contractType ?? "") as ContractDetailsInput["contractType"],
+            cidbGrade: (project.cidbGrade ?? "") as ContractDetailsInput["cidbGrade"],
+            cidbProjectRef: project.cidbProjectRef ?? "",
+            architectName: project.architectName ?? "",
+            engineerName: project.engineerName ?? "",
+            consultantName: project.consultantName ?? "",
+            siteAddress: project.siteAddress ?? "",
+            siteLatitude: project.siteLatitude !== null ? String(project.siteLatitude) : "",
+            siteLongitude: project.siteLongitude !== null ? String(project.siteLongitude) : "",
+            contractEndDate: project.contractEndDate ? project.contractEndDate.toISOString().slice(0, 10) : "",
+            defectsLiabilityPeriodDays: String(project.defectsLiabilityPeriodDays),
+            retentionReleasePercent: Number(project.retentionReleasePercent).toFixed(2),
+            performanceBondPercent: project.performanceBondPercent ? Number(project.performanceBondPercent).toFixed(2) : "",
+            sstRate: Number(project.sstRate).toFixed(2),
+          },
+          milestones: project.milestones.map((m) => ({
+            id: m.id,
+            name: m.name,
+            description: m.description,
+            dueText: formatDate(m.dueDate, locale),
+            completedText: dateText(m.completedDate),
+            status: displayStatus(m, todayKl),
+            weightage: Number(m.weightagePercent).toString(),
+            paymentTrigger: m.paymentTrigger,
+            paymentText: fin && m.paymentAmount ? money(m.paymentAmount.toNumber()) : null,
+          })),
+          progress: weightedProgress(project.milestones),
+          team: project.teamMembers.map((t) => ({ id: t.id, name: t.user.name ?? t.user.email, role: TEAM_ROLE_LABELS[t.role as keyof typeof TEAM_ROLE_LABELS] ?? t.role })),
+          people: staffPeople.map((u) => ({ id: u.id, name: u.name ?? u.email })),
+        }}
         messages={(fin ? project.messages : []).map((m) => ({
           id: m.id,
           fromClient: m.authorRole === "client",

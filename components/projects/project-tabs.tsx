@@ -35,6 +35,7 @@ import { AddChangeOrderForm } from "@/components/forms/add-change-order-form";
 import { AddCostForm } from "@/components/forms/add-cost-form";
 import { AddPaymentForm } from "@/components/forms/add-payment-form";
 import { Badge } from "@/components/ui/badge";
+import { ContractPanel } from "@/components/contract/contract-panel";
 import { MessagesPanel, type MessageRow } from "@/components/client-view/messages-panel";
 import { DiaryPanel, type DiaryRow } from "@/components/diary/diary-panel";
 import type { MaterialCost } from "@/components/diary/diary-form";
@@ -103,6 +104,7 @@ export type BoqRow = {
 
 const TABS = [
   { id: "timeline", label: "Timeline" },
+  { id: "contract", label: "Contract" },
   { id: "costs", label: "costs" },
   { id: "payments", label: "payments" },
   { id: "changes", label: "changeOrders" },
@@ -138,6 +140,7 @@ export function ProjectTabs({
   diaries,
   materialCosts,
   messages,
+  contract,
 }: {
   projectId: string;
   costs: CostRow[];
@@ -159,6 +162,7 @@ export function ProjectTabs({
   diaries: DiaryRow[];
   materialCosts: MaterialCost[];
   messages: MessageRow[];
+  contract: Omit<ComponentProps<typeof ContractPanel>, "projectId">;
 }) {
   const t = useT();
   const allowed = useCan();
@@ -187,6 +191,9 @@ export function ProjectTabs({
       </TabsList>
       <TabsContent value="timeline">
         <TimelinePanel projectId={projectId} initial={timeline} />
+      </TabsContent>
+      <TabsContent value="contract">
+        <ContractPanel projectId={projectId} {...contract} />
       </TabsContent>
       <TabsContent value="costs">
         <PendingOps projectId={projectId} types={["addCost"]} />
